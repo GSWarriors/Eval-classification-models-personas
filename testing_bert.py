@@ -5,7 +5,7 @@ def main():
     #feed in data through pandas
     #with open('ParlAI/data/Persona-Chat/personachat/test_none_original.txt', 'r') as f:
     #    contents =
-    dataframe = pd.read_csv("ParlAI/data/Persona-Chat/personachat/train_self_original.txt",
+    dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_self_original.txt",
     delimiter='\n', header= None, error_bad_lines=False)
     #print(dataframe)
     first_convo = dataframe[0]
