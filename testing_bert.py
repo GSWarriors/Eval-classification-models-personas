@@ -17,25 +17,50 @@ def main():
     convo_string = filter_conversation(first_convo)
 
     #my_list.append(convo_string)
-    first_sentence, second_sentence = filter_by_sentence(convo_string)
-    print("First sentence: " + first_sentence)
-    print("Second sentence: " + second_sentence)
+    first_chat, second_chat = filter_by_sentence(convo_string)
+    print("First person: " + first_chat)
+    print("Second person: " + second_chat)
+
+    #bert tokenization [CLS], [SEP]. can put this into a function
+    marked_first_chat = ""
+    marked_second_chat = ""
+
+    for char in range(0, len(first_chat)):
+        if first_chat[char] == '.' or first_chat[char] == '?' or first_chat[char] == '!':
+            #print("end of sentence")
+            marked_first_chat += first_chat[char] + "[SEP]"
+        else:
+            marked_first_chat += first_chat[char]
+
+    for char in range(0, len(second_chat)):
+        if second_chat[char] == '.' or second_chat[char] == '?' or second_chat[char] == '!':
+            #print("end of sentence")
+            marked_second_chat += second_chat[char] + "[SEP]"
+        else:
+            marked_second_chat += second_chat[char]
+
+    marked_first_chat = "[CLS]" + marked_first_chat
+    marked_second_chat = "[CLS]" + marked_second_chat
+    print(marked_first_chat)
+    print(marked_second_chat)
+
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-    encoding = tokenizer(first_sentence, second_sentence, return_tensors='pt')
+    encoding = tokenizer(first_chat, second_chat, return_tensors='pt')
 
+    #print(encoding)
     loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))
 
+
+
     if logits[0, 0] < logits[0, 1]:
-        print("same sentence")
+        print("same conversation")
     else:
-        print("different sentence")
+        print("different conversation")
 
     print(str(logits[0, 0]))
     print(str(logits[0, 1]))
-    #tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    #model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-    #encoding = tokenizer()
+
 
 
 
@@ -86,3 +111,10 @@ def filter_by_sentence(convo_string):
 
 
 main()
+
+
+"""tokenized_first = tokenizer.tokenize(marked_first_chat)
+tokenized_second = tokenizer.tokenize(marked_second_chat)
+print(tokenized_first)
+print(tokenized_second)
+#print(encoding)"""
