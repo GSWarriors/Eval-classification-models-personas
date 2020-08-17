@@ -44,9 +44,12 @@ def main():
     print(marked_first_chat)
     print(marked_second_chat)
 
+    #first_chat = "I like listening to lofi hip hop."
+    #second_chat = "Awesome! I'm also a lofi listener."
+
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-    encoding = tokenizer(first_chat, second_chat, return_tensors='pt')
+    encoding = tokenizer(marked_first_chat, marked_second_chat, return_tensors='pt')
 
     #print(encoding)
     loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))
