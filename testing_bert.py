@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import pandas as pd
 import transformers as ppb  #pytorch transformers
-from transformers import BertTokenizer, BertForNextSentencePrediction
+#from transformers import BertTokenizer, BertForNextSentencePrediction
 import torch
 import random as rand
 
@@ -17,8 +17,9 @@ def main():
 
     #filters our conversation to just the part we want, put into a list
     filtered_convo = filter_conversation(full_doc)
-    print("original convo: " + str(filtered_convo))
-    print()
+    persona_convo = []
+    snippet_convo = []
+
 
     k = 2
     number_list = []
@@ -30,24 +31,44 @@ def main():
             count += 1
 
 
-    #print(number_list)
-    for i in range(0, len(number_list)):
-        filtered_convo.pop(number_list[i])
-        print("removing conversation " + str(number_list[i]))
-
-    print(filtered_convo)
-    print(len(filtered_convo))
-
+    #add responses in number list to snippet convo, otherwise, persona convo
+    for i in range(0, len(filtered_convo)):
+        if i in number_list:
+            snippet_convo.append(filtered_convo[i])
+        else:
+            persona_convo.append(filtered_convo[i])
 
 
-    """tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    model = BertForNextSentencePrediction.from_pretrained('bert-base-uncased')
-    encoding = tokenizer(first_chat, marked_second_chat, return_tensors='pt')
+    #action steps now:
+    #1. encode the persona using BERT/transfertransfo/dialogGPT
 
-    #print(encoding)
-    loss, logits = model(**encoding, next_sentence_label=torch.LongTensor([1]))"""
+    #tokenizer class
+    model_class, tokenizer_class, pretrained_weights = (ppb.BertModel, ppb.BertTokenizer, 'bert-base-uncased')
+    tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
+    model = model_class.from_pretrained(pretrained_weights)
+
+    #persona tokenization
+    persona_convo = ''.join(persona_convo)
+    encoding = [tokenizer.encode(persona_convo, add_special_tokens=True)]
+    #print("tokenization of this persona is below")
+    #print(str(tokenization))
+
+    #bert padding (shorter sentences with 0)
+    max_len = 0
+    max_len = len(encoding[0])
+    padded = np.array([i + [0]*(max_len-len(i)) for i in encoding])
+    #print(str(np.array(padded).shape))
+
+    #processing with BERT, create input tensor
+    input_ids = torch.tensor(np.array(padded))
+    with torch.no_grad():
+        last_hidden_states = model(input_ids)
 
 
+    #everything in last_hidden_states, now unpack 3-d output tensor
+    print("BERT output tensor")
+    print(last_hidden_states)
+    print(len(last_hidden_states))
 
 
 
@@ -72,7 +93,6 @@ def filter_conversation(full_doc):
 
 
 def filter_responses(response):
-
 
     response_without_number = response[2:]
     #print(response_without_number)
