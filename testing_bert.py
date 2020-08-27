@@ -40,15 +40,6 @@ def main():
     persona_convo = filtered_convo
 
 
-
-    #add responses in number list to snippet convo, otherwise, persona convo
-    """for i in range(0, len(filtered_convo)):
-        if i in number_list:
-            snippet_convo.append(filtered_convo[i])
-        else:
-            persona_convo.append(filtered_convo[i])
-
-
     persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
     snippet_model_class, snippet_tokenizer_class, snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
 
@@ -62,7 +53,6 @@ def main():
     #persona tokenization
     persona_convo = ' '.join(persona_convo)
     persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-
 
 
     #bert padding (shorter sentences with 0)
@@ -82,7 +72,7 @@ def main():
     #the model treats the entire persona as the "sentence". persona encoding
     print("output tensor of distilbert on persona")
     persona_features = persona_hidden_states[0][:, 0, :].numpy()
-    print("persona encoding: " + str(persona_features[0]))"""
+    print("persona encoding: " + str(persona_features[0]))
 
 
 
