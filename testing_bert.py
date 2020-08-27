@@ -38,7 +38,6 @@ def main():
         else:
             persona_convo.append(filtered_convo[i])
 
-
     #action steps now:
     #1. encode the persona using BERT/transfertransfo/dialogGPT
 
@@ -49,14 +48,18 @@ def main():
 
     #persona tokenization
     persona_convo = ''.join(persona_convo)
-    encoding = [tokenizer.encode(persona_convo, add_special_tokens=True)]
-    #print("tokenization of this persona is below")
-    #print(str(tokenization))
+    encoding = [tokenizer.encode(persona_convo, add_special_tokens=True),
+    tokenizer.encode(snippet_convo, add_special_tokens=True)]
 
     #bert padding (shorter sentences with 0)
     max_len = 0
-    max_len = len(encoding[0])
+    max_len = max(len(encoding[0]), len(encoding[1]))
+    #print("first encoding: " + str(encoding[0]))
+    #print("second encoding: " + str(encoding[1]))
+
+
     padded = np.array([i + [0]*(max_len-len(i)) for i in encoding])
+    #print(padded)
     #print(str(np.array(padded).shape))
 
     #processing with BERT, create input tensor
@@ -65,10 +68,15 @@ def main():
         last_hidden_states = model(input_ids)
 
 
-    #everything in last_hidden_states, now unpack 3-d output tensor
+    #everything in last_hidden_states, now unpack 3-d output tensor.
+    #features is 2d array with sentence embeddings of all sentences in dataset.
+    #the model treats the entire persona as the "sentence". persona encoding
     print("BERT output tensor")
-    print(last_hidden_states)
-    print(len(last_hidden_states))
+    features = last_hidden_states[0][:, 0, :].numpy()
+    print("persona encoding: " + str(features[0]))
+    print()
+    print("gold snippet encoding: " + str(features[1]))
+
 
 
 
