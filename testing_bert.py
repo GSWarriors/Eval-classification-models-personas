@@ -21,6 +21,8 @@ def main():
     snippet_convo = []
 
 
+    #make this a function called filter_persona_and_snippet()
+
     k = 2
     rand_convo_count = 0
     rand_convo_index = -1
@@ -40,7 +42,13 @@ def main():
     persona_convo = filtered_convo
 
 
-    persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
+    #persona_convo = add_speaker_tokens(persona_convo)
+    #snippet_convo = add_speaker_tokens(snippet_convo)
+
+
+    #create model, tokenizer and weights for persona and snippets
+    #make this a function called tokenize_and_encode()
+    """persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
     snippet_model_class, snippet_tokenizer_class, snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
 
 
@@ -50,9 +58,13 @@ def main():
     snippet_tokenizer = snippet_tokenizer_class.from_pretrained(snippet_pretrained_weights)
     snippet_model = snippet_model_class.from_pretrained(snippet_pretrained_weights)
 
-    #persona tokenization
+    #persona and snippet tokenization
     persona_convo = ' '.join(persona_convo)
     persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
+
+    snippet_convo = ' '.join(snippet_convo)
+    snippet_encoding = [snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)]
+
 
 
     #bert padding (shorter sentences with 0)
@@ -60,22 +72,40 @@ def main():
     persona_max_len = len(persona_encoding[0])
     padded_persona = np.array([i + [0]*(persona_max_len-len(i)) for i in persona_encoding])
 
+    snippet_max_len = 0
+    snippet_max_len = len(snippet_encoding[0])
+    padded_snippet = np.array([i + [0]*(snippet_max_len-len(i)) for i in snippet_encoding])
+
 
     #processing with BERT, create input tensor
     persona_input_ids = torch.tensor(np.array(padded_persona))
-    with torch.no_grad():
+    snippet_input_ids = torch.tensor(np.array(padded_snippet))
+
+    with torch.enable_grad():
         persona_hidden_states = persona_model(persona_input_ids)
+
+    with torch.no_grad():
+        snippet_hidden_states = snippet_model(snippet_input_ids)
 
 
     #everything in last_hidden_states, now unpack 3-d output tensor.
     #features is 2d array with sentence embeddings of all sentences in dataset.
     #the model treats the entire persona as the "sentence". persona encoding
     print("output tensor of distilbert on persona")
-    persona_features = persona_hidden_states[0][:, 0, :].numpy()
+    persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
     print("persona encoding: " + str(persona_features[0]))
 
+    print("output tensor of distilbert on snippet")
+    snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
+    print("snippet_encoding: " + str(snippet_features[0]))
+    #next step- add special tokens"""
 
 
+#def add_speaker_tokens(convo):
+
+    #for i in range(0, len(convo)):
+    #print(convo)
+    #print()
 
 
 
