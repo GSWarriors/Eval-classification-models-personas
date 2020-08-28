@@ -42,7 +42,7 @@ def main():
     persona_convo = filtered_convo
 
 
-    #persona_convo = add_speaker_tokens(persona_convo)
+    persona_convo = add_speaker_tokens(persona_convo)
     #snippet_convo = add_speaker_tokens(snippet_convo)
 
 
@@ -101,11 +101,44 @@ def main():
     #next step- add special tokens"""
 
 
-#def add_speaker_tokens(convo):
+def add_speaker_tokens(convo):
 
     #for i in range(0, len(convo)):
     #print(convo)
     #print()
+    speaker_num = 1
+    new_response_str = ""
+    tab_count = 0
+    token_added = False
+    new_convo = []
+
+    for char in convo:
+
+        if char == '\t':
+            tab_count += 1
+            print("tab")
+            if speaker_num == 1:
+                speaker_num = 2
+                speaker_str = '<speaker-2>'
+            else:
+                speaker_num = 1
+                speaker_str = '<speaker-1>'
+
+            new_response_str = speaker_str + char
+            new_convo.append(new_response_str)
+
+        """else:
+            if speaker_num == 1:
+                speaker_str = '<speaker-1>'
+            else:
+                speaker_str = '<speaker-2>'
+
+            new_response_str = speaker_str + char
+            new_convo.append(new_response_str)"""
+
+    print("new convo for persona is: " + str(new_convo))
+
+
 
 
 
@@ -122,7 +155,8 @@ def filter_conversation(full_doc):
     for i in range(0, len(convo_list)):
         filtered_convo.append(filter_responses(convo_list[i]))
 
-    #print(filtered_convo)
+    print("keeping tabs: " + repr(filtered_convo))
+    print()
     return filtered_convo
 
 
@@ -134,17 +168,16 @@ def filter_responses(response):
     #print(response_without_number)
     #print()
     tab_count = 0
-    response_without_tabs = ""
+    two_speaker_utterances = ""
 
     for char in response_without_number:
         if tab_count < 2:
             if char == '\t':
                 tab_count += 1
 
-            else:
-                response_without_tabs += char
+            two_speaker_utterances += char
 
-    return response_without_tabs
+    return two_speaker_utterances
 
 
 
