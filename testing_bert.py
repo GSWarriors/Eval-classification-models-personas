@@ -43,6 +43,7 @@ def main():
 
 
     persona_convo = add_speaker_tokens(persona_convo)
+    print("persona convo with tokens is: " + str(persona_convo))
     #snippet_convo = add_speaker_tokens(snippet_convo)
 
 
@@ -103,40 +104,41 @@ def main():
 
 def add_speaker_tokens(convo):
 
-    #for i in range(0, len(convo)):
-    #print(convo)
-    #print()
-    speaker_num = 1
+    speaker_num = 2
     new_response_str = ""
-    tab_count = 0
-    token_added = False
     new_convo = []
 
-    for char in convo:
+    for line in range(0, len(convo)):
 
-        if char == '\t':
-            tab_count += 1
-            print("tab")
-            if speaker_num == 1:
-                speaker_num = 2
-                speaker_str = '<speaker-2>'
-            else:
-                speaker_num = 1
-                speaker_str = '<speaker-1>'
+        last_speaker_index = 0
+        new_response_str = ""
+        for char in range(0, len(convo[line])):
+            if convo[line][char] == '\t':
+                if speaker_num == 1:
+                    speaker_num = 2
+                    speaker_str = ' <speaker-2> '
 
-            new_response_str = speaker_str + char
-            new_convo.append(new_response_str)
+                    #add speaker 2 tag from after tab where speaker 1 left off
+                    curr_response = convo[line][last_speaker_index + 1: len(convo[line]) - 1]
+                    new_response_str += speaker_str + curr_response
+                    #print("new response str is : " + new_response_str)
 
-        """else:
-            if speaker_num == 1:
-                speaker_str = '<speaker-1>'
-            else:
-                speaker_str = '<speaker-2>'
+                else:
+                    speaker_num = 1
+                    speaker_str = '<speaker-1> '
 
-            new_response_str = speaker_str + char
-            new_convo.append(new_response_str)"""
+                    #first speaker is 0 up to current char (the tab)
+                    curr_response = convo[line][0: char]
+                    new_response_str += speaker_str + curr_response
+                    #print("new response str is : " + new_response_str)
+                    last_speaker_index = char
 
-    print("new convo for persona is: " + str(new_convo))
+        new_convo.append(new_response_str)
+
+    #print("new convo for persona is: " + str(new_convo))
+    return new_convo
+
+
 
 
 
