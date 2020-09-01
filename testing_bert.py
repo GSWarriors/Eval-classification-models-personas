@@ -8,48 +8,44 @@ import random as rand
 
 
 
-def main():
-
-    my_list = []
-    dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_none_original.txt",
-    delimiter='\n', header= None, error_bad_lines=False)
-    full_doc = dataframe[0]
-
-    #filters our conversation to just the part we want, put into a list
-    filtered_convo = filter_conversation(full_doc)
-    persona_convo = []
-    snippet_convo = []
 
 
-    #make this a function called filter_persona_and_snippet()
+def main(df):
 
     k = 2
-    rand_convo_count = 0
-    rand_convo_index = -1
-    while rand_convo_count < 1:
-        rand_convo_index = rand.randint(0, len(filtered_convo) - 1)
-        rand_convo_count += 1
+    persona_convo = []
+    snippet_convo = []
+    full_doc = df[0]
 
 
-    if len(filtered_convo) > 1:
-        if rand_convo_index == len(filtered_convo) - 1:
-            snippet_convo = filtered_convo[rand_convo_index - 1:]
-            del filtered_convo[rand_convo_index - 1:]
+    count = 0
+    convo_list = []
+    filtered_convo = []
+
+    #go through full document, and append to convo list for 8 responses
+    #(1 conversation). Then append these to a list, and get the persona and snippet
+    #from it. Finally, reset convo_list to just the current line, and filtered_convo
+
+    for line in range(0, len(full_doc)):
+        if line > 0 and line % 8 == 0:
+            #convo_list = []
+            for i in range(0, len(convo_list)):
+                filtered_convo.append(filter_for_responses(convo_list[i]))
+
+            persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
+
+            convo_list = [full_doc[line]]
+            filtered_convo = []
         else:
-            snippet_convo = filtered_convo[rand_convo_index: rand_convo_index + 2]
-            del filtered_convo[rand_convo_index: rand_convo_index + 2]
-
-    persona_convo = filtered_convo
+            convo_list.append(full_doc[line])
 
 
-    persona_convo = add_speaker_tokens(persona_convo)
-    print("persona convo with tokens is: " + str(persona_convo))
-    #snippet_convo = add_speaker_tokens(snippet_convo)
+
 
 
     #create model, tokenizer and weights for persona and snippets
     #make this a function called tokenize_and_encode()
-    """persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
+"""persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
     snippet_model_class, snippet_tokenizer_class, snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
 
 
@@ -98,8 +94,43 @@ def main():
 
     print("output tensor of distilbert on snippet")
     snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
-    print("snippet_encoding: " + str(snippet_features[0]))
-    #next step- add special tokens"""
+    print("snippet_encoding: " + str(snippet_features[0]))"""
+
+
+
+
+def filter_persona_and_snippet(filtered_convo, snippet_size):
+
+
+    rand_convo_count = 0
+    rand_convo_index = -1
+    while rand_convo_count < 1:
+        rand_convo_index = rand.randint(0, len(filtered_convo) - 1)
+        rand_convo_count += 1
+
+
+    if len(filtered_convo) > 1:
+        if rand_convo_index == len(filtered_convo) - 1:
+            snippet_convo = filtered_convo[rand_convo_index - 1:]
+            del filtered_convo[rand_convo_index - 1:]
+        else:
+            snippet_convo = filtered_convo[rand_convo_index: rand_convo_index + snippet_size]
+            del filtered_convo[rand_convo_index: rand_convo_index + snippet_size]
+
+    persona_convo = filtered_convo
+
+
+    persona_convo = add_speaker_tokens(persona_convo)
+    print()
+    print("persona convo with tokens is: " + str(persona_convo))
+    print()
+    snippet_convo = add_speaker_tokens(snippet_convo)
+    print("snippet convo with tokens is: " + str(snippet_convo))
+    print()
+
+    return persona_convo, snippet_convo
+
+
 
 
 def add_speaker_tokens(convo):
@@ -135,12 +166,7 @@ def add_speaker_tokens(convo):
 
         new_convo.append(new_response_str)
 
-    #print("new convo for persona is: " + str(new_convo))
     return new_convo
-
-
-
-
 
 
 
@@ -155,16 +181,15 @@ def filter_conversation(full_doc):
         convo_list.append(full_doc[line])
 
     for i in range(0, len(convo_list)):
-        filtered_convo.append(filter_responses(convo_list[i]))
+        filtered_convo.append(filter_for_responses(convo_list[i]))
 
-    print("keeping tabs: " + repr(filtered_convo))
-    print()
+
     return filtered_convo
 
 
 
-
-def filter_responses(response):
+#filters 1 back and forth between two speakers and returns the string
+def filter_for_responses(response):
 
     response_without_number = response[2:]
     #print(response_without_number)
@@ -183,4 +208,13 @@ def filter_responses(response):
 
 
 
-main()
+
+
+
+
+my_list = []
+dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_none_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
+
+
+main(dataframe)
