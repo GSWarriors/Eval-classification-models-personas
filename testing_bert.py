@@ -41,11 +41,14 @@ def main(df):
 
 
 
-
+    print("persona convo: " + str(persona_convo))
+    print()
+    print("snippet convo: " + str(snippet_convo))
+    print()
 
     #create model, tokenizer and weights for persona and snippets
     #make this a function called tokenize_and_encode()
-"""persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
+    persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
     snippet_model_class, snippet_tokenizer_class, snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
 
 
@@ -54,6 +57,18 @@ def main(df):
 
     snippet_tokenizer = snippet_tokenizer_class.from_pretrained(snippet_pretrained_weights)
     snippet_model = snippet_model_class.from_pretrained(snippet_pretrained_weights)
+
+
+    #adding tokenizer for speaker 1 and speaker 2 just for persona and snippet
+    special_tokens_dict = {'additional_special_tokens': ['<speaker-1>', '<speaker-2>']}
+    num_added_toks = persona_tokenizer.add_special_tokens(special_tokens_dict)
+    snippet_tokenizer.add_special_tokens(special_tokens_dict)
+
+    print("number of added tokens: " + str(num_added_toks))
+    persona_model.resize_token_embeddings(len(persona_tokenizer))
+    snippet_model.resize_token_embeddings(len(snippet_tokenizer))
+
+
 
     #persona and snippet tokenization
     persona_convo = ' '.join(persona_convo)
@@ -88,13 +103,13 @@ def main(df):
     #everything in last_hidden_states, now unpack 3-d output tensor.
     #features is 2d array with sentence embeddings of all sentences in dataset.
     #the model treats the entire persona as the "sentence". persona encoding
-    print("output tensor of distilbert on persona")
+    print("output tensor of distilbert on persona with special tokens")
     persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
     print("persona encoding: " + str(persona_features[0]))
 
-    print("output tensor of distilbert on snippet")
+    print("output tensor of distilbert on snippet with special tokens")
     snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
-    print("snippet_encoding: " + str(snippet_features[0]))"""
+    print("snippet_encoding: " + str(snippet_features[0]))
 
 
 
@@ -121,12 +136,8 @@ def filter_persona_and_snippet(filtered_convo, snippet_size):
 
 
     persona_convo = add_speaker_tokens(persona_convo)
-    print()
-    print("persona convo with tokens is: " + str(persona_convo))
-    print()
     snippet_convo = add_speaker_tokens(snippet_convo)
-    print("snippet convo with tokens is: " + str(snippet_convo))
-    print()
+    
 
     return persona_convo, snippet_convo
 
@@ -168,23 +179,6 @@ def add_speaker_tokens(convo):
 
     return new_convo
 
-
-
-
-def filter_conversation(full_doc):
-
-    count = 0
-    convo_list = []
-    filtered_convo = []
-
-    for line in range(0, 7):
-        convo_list.append(full_doc[line])
-
-    for i in range(0, len(convo_list)):
-        filtered_convo.append(filter_for_responses(convo_list[i]))
-
-
-    return filtered_convo
 
 
 
