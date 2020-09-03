@@ -96,16 +96,23 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     for i in snippet_encoding:
         if len(i) > snippet_max_len:
             snippet_max_len = len(i)
-
-    print("snippet max length is: " + str(snippet_max_len))
     padded_snippet = np.array([i + [0]*(snippet_max_len-len(i)) for i in snippet_encoding])
 
-    #processing with BERT, create input tensor
-    #persona_input_ids = torch.tensor(np.array(padded_persona))
-    snippet_input_ids = torch.tensor(np.array(padded_snippet))
 
-    #with torch.enable_grad():
-    #    persona_hidden_states = persona_model(persona_input_ids)
+    #masking- create another variable to mask the padding we've created for persona and snippets
+    snippet_attention_mask = np.where(padded_snippet != 0, 1, 0)
+
+
+
+    #processing with BERT, create input tensor, persona
+    persona_input_ids = torch.tensor(np.array(padded_persona))
+    snippet_input_ids = torch.tensor(np.array(padded_snippet))
+    persona_model.train()
+    snippet_model.eval()
+
+    with torch.enable_grad():
+        persona_hidden_states = persona_model(persona_input_ids)
+
 
     with torch.no_grad():
         snippet_hidden_states = snippet_model(snippet_input_ids)
@@ -114,13 +121,36 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     #everything in last_hidden_states, now unpack 3-d output tensor.
     #features is 2d array with sentence embeddings of all sentences in dataset.
     #the model treats the entire persona as the "sentence". persona encoding
-    """print("output tensor of distilbert on persona with special tokens")
+    print("output tensor of distilbert on persona with special tokens")
     persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
-    print("persona embedding: " + str(persona_features[0]))"""
+    print("persona vector shape: " + str(persona_features.shape))
+
+    print()
 
     print("output tensor of distilbert on snippet with special tokens")
     snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
-    print("embedding of all snippets:" + str(snippet_features[0]))
+    print("snippet vector shape: " + str(snippet_features.shape))
+    #combine using bilinear layer, then use crossentropy loss.
+    #evaluate on a particular classification. persona features are of shape (1, 768)
+    #and snippet features are of shape (8214, 768)
+    #print("one snippet: " + str(snippet_features[0]))
+    #print("persona: " + str(persona_features))
+
+
+    distilbert_size = persona_features.shape[1]
+
+    torch_persona_features = torch.from_numpy(persona_features[0])
+    torch_snippet_features = torch.from_numpy(snippet_features[0])
+
+
+    m = torch.nn.Bilinear(distilbert_size, distilbert_size, distilbert_size)
+    output = m(torch_persona_features, torch_snippet_features)
+
+    print("output is: " + str(output))
+    print("output size: " + str(output.size()))
+    #output = torch.nn.Bilinear(persona_features, snippet_features, len(persona_features))
+    #print("output from bilinear: " + str(output))"""
+
 
 
 
