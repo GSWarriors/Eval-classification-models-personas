@@ -91,45 +91,28 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
     #tokenization and encoding for all snippets, as well as input tensors
     snippet_input_ids_list = []
+
     for i in range(0, len(snippet_list)):
         curr_snippet = ' '.join(snippet_list[i])
-        snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
+        snippet_encoding = snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
+        snippet_input_ids_list.append(snippet_encoding)
+    #print(str(snippet_input_ids_list))
 
-        snippet_max_len = len(curr_snippet)
-        padded_snippet = np.array([j + [0]*(snippet_max_len-len(j)) for j in snippet_encoding])
-        snippet_input_ids = torch.tensor(np.array(snippet_encoding))
-        snippet_input_ids_list.append(snippet_input_ids)
+    #now, pad the list
+    max_snippet_len = 0
+    for snippet_ids in snippet_input_ids_list:
+        if len(snippet_ids) > max_snippet_len:
+            max_snippet_len = len(snippet_ids)
 
+    padded_snippet_list = np.array([i + [0]*(max_snippet_len-len(i)) for i in snippet_input_ids_list])
+    #print(str(padded_snippet_list))
+    for snippet in range(0, len(padded_snippet_list)):
+        print("encoded snippet: " + str(padded_snippet_list[snippet]))
+        print()
 
-    persona_model.train()
-    snippet_model.eval()
-
-    start_time = time.time()
-    print("starting ")
-
-
-    with torch.enable_grad():
-        persona_hidden_states = persona_model(persona_input_ids)
-        persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
-        print("persona embedding (feature vector) :" + str(persona_features))
-
-    end_time = time.time()
-    print(str(end_time - start_time) + " seconds")
-    print()
-
-    """snippet_embeddings_list = []
-    with torch.no_grad():
-        for i in range(0, len(snippet_input_ids_list)):
-            snippet_hidden_states = snippet_model(snippet_input_ids_list[i])
-            snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
-            snippet_embeddings_list.append(snippet_features)
-            print("on snippet: " + str(i))
-
-    print("snippet embeddings: " + str(snippet_embeddings_list))"""
 
     #masking- create another variable to mask the padding we've created for persona and snippets
     #snippet_attention_mask = np.where(padded_snippet != 0, 1, 0)
-
 
 
     """#processing with BERT, create input tensor, persona
