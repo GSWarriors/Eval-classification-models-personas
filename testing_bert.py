@@ -5,7 +5,7 @@ import transformers as ppb  #pytorch transformers
 #from transformers import BertTokenizer, BertForNextSentencePrediction
 import torch
 import random as rand
-
+import time
 
 
 
@@ -77,34 +77,62 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     persona_model.resize_token_embeddings(len(persona_tokenizer))
     snippet_model.resize_token_embeddings(len(snippet_tokenizer))
 
-    #persona and snippet tokenization
+    #persona tokenization
     persona_convo = ' '.join(persona_convo)
     persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
 
-    snippet_convo = ' '.join(snippet_convo)
-    snippet_encoding = []
-
-    for i in range(0, len(snippet_list)):
-        snippet_encoding.append(snippet_tokenizer.encode(snippet_list[i]))
-
-    #bert padding (shorter sentences with 0)
+    #bert padding (shorter sentences with 0) with persona
     persona_max_len = 0
     persona_max_len = len(persona_encoding[0])
     padded_persona = np.array([i + [0]*(persona_max_len-len(i)) for i in persona_encoding])
 
-    snippet_max_len = 0
-    for i in snippet_encoding:
-        if len(i) > snippet_max_len:
-            snippet_max_len = len(i)
-    padded_snippet = np.array([i + [0]*(snippet_max_len-len(i)) for i in snippet_encoding])
+    #create persona input tensor
+    persona_input_ids = torch.tensor(np.array(padded_persona))
 
+    #tokenization and encoding for all snippets, as well as input tensors
+    snippet_input_ids_list = []
+    for i in range(0, len(snippet_list)):
+        curr_snippet = ' '.join(snippet_list[i])
+        snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
+
+        snippet_max_len = len(curr_snippet)
+        padded_snippet = np.array([j + [0]*(snippet_max_len-len(j)) for j in snippet_encoding])
+        snippet_input_ids = torch.tensor(np.array(snippet_encoding))
+        snippet_input_ids_list.append(snippet_input_ids)
+
+
+    persona_model.train()
+    snippet_model.eval()
+
+    start_time = time.time()
+    print("starting ")
+
+
+    with torch.enable_grad():
+        persona_hidden_states = persona_model(persona_input_ids)
+        persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
+        print("persona embedding (feature vector) :" + str(persona_features))
+
+    end_time = time.time()
+    print(str(end_time - start_time) + " seconds")
+    print()
+
+    """snippet_embeddings_list = []
+    with torch.no_grad():
+        for i in range(0, len(snippet_input_ids_list)):
+            snippet_hidden_states = snippet_model(snippet_input_ids_list[i])
+            snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
+            snippet_embeddings_list.append(snippet_features)
+            print("on snippet: " + str(i))
+
+    print("snippet embeddings: " + str(snippet_embeddings_list))"""
 
     #masking- create another variable to mask the padding we've created for persona and snippets
-    snippet_attention_mask = np.where(padded_snippet != 0, 1, 0)
+    #snippet_attention_mask = np.where(padded_snippet != 0, 1, 0)
 
 
 
-    #processing with BERT, create input tensor, persona
+    """#processing with BERT, create input tensor, persona
     persona_input_ids = torch.tensor(np.array(padded_persona))
     snippet_input_ids = torch.tensor(np.array(padded_snippet))
     persona_model.train()
@@ -123,35 +151,39 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     #the model treats the entire persona as the "sentence". persona encoding
     print("output tensor of distilbert on persona with special tokens")
     persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
-    print("persona vector shape: " + str(persona_features.shape))
+    print("persona vector :" + str(persona_features))
 
     print()
 
     print("output tensor of distilbert on snippet with special tokens")
     snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
-    print("snippet vector shape: " + str(snippet_features.shape))
+    print("snippet vector: " + str(snippet_features))
     #combine using bilinear layer, then use crossentropy loss.
-    #evaluate on a particular classification. persona features are of shape (1, 768)
-    #and snippet features are of shape (8214, 768)
-    #print("one snippet: " + str(snippet_features[0]))
-    #print("persona: " + str(persona_features))
 
 
+
+    persona_zero_outputs = []
     distilbert_size = persona_features.shape[1]
 
     torch_persona_features = torch.from_numpy(persona_features[0])
     torch_snippet_features = torch.from_numpy(snippet_features[0])
 
-
     m = torch.nn.Bilinear(distilbert_size, distilbert_size, distilbert_size)
     output = m(torch_persona_features, torch_snippet_features)
 
-    print("output is: " + str(output))
-    print("output size: " + str(output.size()))
-    #output = torch.nn.Bilinear(persona_features, snippet_features, len(persona_features))
-    #print("output from bilinear: " + str(output))"""
+    print("output from bilinear: " + str(output))
 
+    torch_persona_features = torch.from_numpy(persona_features[0])
+    #do the above for all the snippets we have.
+    for i in range(0, len(snippet_list)):
 
+        snippet_encoding = snippet_tokenizer.encode(snippet_list[i], add_special_tokens=True)
+
+        torch_snippet_features = torch.from_numpy(snippet_features[i])
+        m = torch.nn.Bilinear(distilbert_size, distilbert_size, distilbert_size)
+        output = m(torch_persona_features, torch_snippet_features)
+        print("output from bilinear for snippet " + str(i) + " " + str(output))
+        print()"""
 
 
 
