@@ -23,6 +23,9 @@ def main(df):
     filtered_convo = []
     snippet_list = []
 
+    first_persona = []
+    first_snippet_convo = []
+
     #go through full document, and append to convo list for 8 responses
     #(1 conversation). Then append these to a list, and get the persona and snippet
     #from it. Finally, reset convo_list to just the current line, and filtered_convo
@@ -34,6 +37,12 @@ def main(df):
                 filtered_convo.append(filter_for_responses(convo_list[i]))
 
             persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
+            if len(first_persona) == 0:
+                first_persona = persona_convo
+
+            if len(first_snippet_convo) == 0:
+                first_snippet_convo = snippet_convo
+
             snippet_list.append(snippet_convo)
             #function here to add model, tokenizer, padding, and feature extraction
 
@@ -43,14 +52,13 @@ def main(df):
             convo_list.append(full_doc[line])
 
 
-    """print("persona convo: " + str(persona_convo))
+    print("persona convo: " + str(first_persona))
     print()
-    print("snippet convo: " + str(snippet_convo))
-    print()"""
+    print("snippet convo: " + str(first_snippet_convo))
+    print()
 
 
     tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_list)
-
 
 
 
@@ -83,90 +91,83 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
     #bert padding (shorter sentences with 0) with persona
     persona_max_len = 0
-    persona_max_len = len(persona_encoding[0])
+    persona_max_len = len(persona_encoding)
     padded_persona = np.array([i + [0]*(persona_max_len-len(i)) for i in persona_encoding])
 
-    #create persona input tensor
-    persona_input_ids = torch.tensor(np.array(padded_persona))
 
     #tokenization and encoding for all snippets, as well as input tensors
     snippet_input_ids_list = []
 
     for i in range(0, len(snippet_list)):
-        curr_snippet = ' '.join(snippet_list[i])
-        snippet_encoding = snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
-        snippet_input_ids_list.append(snippet_encoding)
-    #print(str(snippet_input_ids_list))
+        if i < 500:
+            curr_snippet = ' '.join(snippet_list[i])
+            snippet_encoding = snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
+            snippet_input_ids_list.append(snippet_encoding)
+        else:
+            break
 
-    #now, pad the list
+
+    #padding list of snippets
     max_snippet_len = 0
     for snippet_ids in snippet_input_ids_list:
         if len(snippet_ids) > max_snippet_len:
             max_snippet_len = len(snippet_ids)
 
+
     padded_snippet_list = np.array([i + [0]*(max_snippet_len-len(i)) for i in snippet_input_ids_list])
-    #print(str(padded_snippet_list))
-    for snippet in range(0, len(padded_snippet_list)):
-        print("encoded snippet: " + str(padded_snippet_list[snippet]))
-        print()
 
 
     #masking- create another variable to mask the padding we've created for persona and snippets
-    #snippet_attention_mask = np.where(padded_snippet != 0, 1, 0)
+    snippet_attention_mask = np.where(padded_snippet_list != 0, 1, 0)
 
 
-    """#processing with BERT, create input tensor, persona
+    #processing with BERT, create input tensor for persona and snippet list
     persona_input_ids = torch.tensor(np.array(padded_persona))
-    snippet_input_ids = torch.tensor(np.array(padded_snippet))
+    snippet_input_ids = torch.tensor(np.array(padded_snippet_list))
+    snippet_attention_mask = torch.tensor(snippet_attention_mask)
+
     persona_model.train()
     snippet_model.eval()
 
     with torch.enable_grad():
         persona_hidden_states = persona_model(persona_input_ids)
 
-
     with torch.no_grad():
-        snippet_hidden_states = snippet_model(snippet_input_ids)
+        snippet_hidden_states = snippet_model(snippet_input_ids, attention_mask = snippet_attention_mask)
 
 
     #everything in last_hidden_states, now unpack 3-d output tensor.
     #features is 2d array with sentence embeddings of all sentences in dataset.
     #the model treats the entire persona as the "sentence". persona encoding
-    print("output tensor of distilbert on persona with special tokens")
     persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
-    print("persona vector :" + str(persona_features))
-
-    print()
-
-    print("output tensor of distilbert on snippet with special tokens")
-    snippet_features = snippet_hidden_states[0][:, 0, :].numpy()
-    print("snippet vector: " + str(snippet_features))
-    #combine using bilinear layer, then use crossentropy loss.
+    snippet_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
+    #combine using bilinear layer, then use crossentropy loss."""
 
 
 
-    persona_zero_outputs = []
     distilbert_size = persona_features.shape[1]
 
-    torch_persona_features = torch.from_numpy(persona_features[0])
-    torch_snippet_features = torch.from_numpy(snippet_features[0])
-
-    m = torch.nn.Bilinear(distilbert_size, distilbert_size, distilbert_size)
-    output = m(torch_persona_features, torch_snippet_features)
-
-    print("output from bilinear: " + str(output))
 
     torch_persona_features = torch.from_numpy(persona_features[0])
-    #do the above for all the snippets we have.
-    for i in range(0, len(snippet_list)):
+    torch_snippet_features = torch.from_numpy(snippet_features)
+    print("shape of persona: " + str(persona_features.shape))
+    print("shape of snippet: " + str(snippet_features.shape))
 
-        snippet_encoding = snippet_tokenizer.encode(snippet_list[i], add_special_tokens=True)
+    #(1, 768) persona and a (500, 768) list of lists of snippets
 
-        torch_snippet_features = torch.from_numpy(snippet_features[i])
+    print("persona: " + str(torch_persona_features))
+
+    #go through all snippets and do bilinear with persona
+    for snippet in range(0, len(torch_snippet_features)):
         m = torch.nn.Bilinear(distilbert_size, distilbert_size, distilbert_size)
-        output = m(torch_persona_features, torch_snippet_features)
-        print("output from bilinear for snippet " + str(i) + " " + str(output))
-        print()"""
+
+        print("current snippet: " + str(torch_snippet_features[snippet]))
+        output = m(torch_persona_features, torch_snippet_features[snippet])
+        print("output from bilinear: " + str(output))
+        print()
+
+    #do the above for all the snippets we have.
+
 
 
 
