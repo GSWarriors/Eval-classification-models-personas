@@ -146,15 +146,12 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
 
     distilbert_size = persona_features.shape[1]
-
-
     torch_persona_features = torch.from_numpy(persona_features[0])
     torch_snippet_features = torch.from_numpy(snippet_features)
     print("shape of persona: " + str(persona_features.shape))
     print("shape of snippet: " + str(snippet_features.shape))
 
     #(1, 768) persona and a (500, 768) list of lists of snippets
-
     print("persona: " + str(torch_persona_features))
 
     #go through all snippets and do bilinear with persona
