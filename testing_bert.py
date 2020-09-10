@@ -82,15 +82,9 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     num_added_toks = persona_tokenizer.add_special_tokens(special_tokens_dict)
     snippet_tokenizer.add_special_tokens(special_tokens_dict)
 
-    print("number of added tokens: " + str(num_added_toks))
+    #print("number of added tokens: " + str(num_added_toks))
     persona_model.resize_token_embeddings(len(persona_tokenizer))
     snippet_model.resize_token_embeddings(len(snippet_tokenizer))
-
-
-    """#bert padding (shorter sentences with 0) with persona
-    persona_max_len = 0
-    persona_max_len = len(persona_encoding)
-    padded_persona = np.array([i + [0]*(persona_max_len-len(i)) for i in persona_encoding])"""
 
 
     #separate snippets into training and validation sets
@@ -101,29 +95,41 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     num_epochs = 1
     batch_size = 32
     snippet_input_ids_list = []
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-
-    #training snippets for this particular persona 
+    #training snippets for this particular persona
+    #go through the current batch and encode all snippets in the batch.
+    #add snippet input ids (encoding) to list using extend
     for epoch in range(0, num_epochs):
-        for batch in range(0, len(snippet_list), batch_size):
-            #persona tokenization
-            persona_convo = ' '.join(persona_convo)
-            persona_encoding = persona_tokenizer.encode(persona_convo, add_special_tokens=True)
+        persona_convo = ' '.join(persona_convo)
+        print("size of convo: " + str(len(persona_convo)))
+        persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
 
-            #go through the current batch and encode all snippets in the batch.
-            #add snippet input ids (encoding) to list using extend
+        for batch in range(0, len(snippet_list), batch_size):
+
+            #handling the last batch (if less than 32)
+            if batch + batch_size > len(snippet_list):
+                batch_size = len(snippet_list) - batch
+
             for batch_snippet in range(batch, batch + batch_size):
                 curr_snippet = ' '.join(snippet_list[batch_snippet])
                 snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
                 snippet_input_ids_list.extend(snippet_encoding)
-                #print("snippet encoding is: " + str(snippet_input_ids_list))
-            print()
 
+            #print("batch size: " + str(batch_size))
+
+            padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
             padded_snippet_list, snippet_attention_mask = add_padding_and_mask(snippet_input_ids_list)
-            for i in range(0, len(padded_snippet_list)):
-                print(str(padded_snippet_list[i]))
-            break
+
+            persona_input_ids = torch.from_numpy(padded_persona).float().to(device)
+            snippet_input_ids = torch.from_numpy(padded_snippet_list).float().to(device)
+            snippet_attention_mask = torch.tensor(snippet_attention_mask).to(device)
+
+            #print("persona tensor: " + str(persona_input_ids))
+            #print("snippet list tensor: " + str(snippet_input_ids) + ", batch: " + str(batch))
+            #print()
+
 
 
 
