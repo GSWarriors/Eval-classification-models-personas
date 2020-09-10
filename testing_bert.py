@@ -6,6 +6,7 @@ import transformers as ppb  #pytorch transformers
 import torch
 import random as rand
 import time
+import math
 
 
 
@@ -85,27 +86,52 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     persona_model.resize_token_embeddings(len(persona_tokenizer))
     snippet_model.resize_token_embeddings(len(snippet_tokenizer))
 
-    #persona tokenization
-    persona_convo = ' '.join(persona_convo)
-    persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
 
-    #bert padding (shorter sentences with 0) with persona
+    """#bert padding (shorter sentences with 0) with persona
     persona_max_len = 0
     persona_max_len = len(persona_encoding)
-    padded_persona = np.array([i + [0]*(persona_max_len-len(i)) for i in persona_encoding])
+    padded_persona = np.array([i + [0]*(persona_max_len-len(i)) for i in persona_encoding])"""
 
 
-    #tokenization and encoding for all snippets, as well as input tensors
+    #separate snippets into training and validation sets
+    training_size = math.floor(0.8*len(snippet_list))
+    validation_size = len(snippet_list) - training_size
+
+
+    num_epochs = 1
+    batch_size = 32
     snippet_input_ids_list = []
 
-    for i in range(0, len(snippet_list)):
-        if i < 500:
-            curr_snippet = ' '.join(snippet_list[i])
-            snippet_encoding = snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
-            snippet_input_ids_list.append(snippet_encoding)
-        else:
+
+
+    #training snippets for this particular persona 
+    for epoch in range(0, num_epochs):
+        for batch in range(0, len(snippet_list), batch_size):
+            #persona tokenization
+            persona_convo = ' '.join(persona_convo)
+            persona_encoding = persona_tokenizer.encode(persona_convo, add_special_tokens=True)
+
+            #go through the current batch and encode all snippets in the batch.
+            #add snippet input ids (encoding) to list using extend
+            for batch_snippet in range(batch, batch + batch_size):
+                curr_snippet = ' '.join(snippet_list[batch_snippet])
+                snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
+                snippet_input_ids_list.extend(snippet_encoding)
+                #print("snippet encoding is: " + str(snippet_input_ids_list))
+            print()
+
+            padded_snippet_list, snippet_attention_mask = add_padding_and_mask(snippet_input_ids_list)
+            for i in range(0, len(padded_snippet_list)):
+                print(str(padded_snippet_list[i]))
             break
 
+
+
+
+
+
+
+    """
 
     #padding list of snippets
     max_snippet_len = 0
@@ -141,7 +167,7 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     #the model treats the entire persona as the "sentence". persona encoding
     persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
     snippet_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
-    #combine using bilinear layer, then use crossentropy loss."""
+    #combine using bilinear layer, then use crossentropy loss.
 
 
 
@@ -155,15 +181,32 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     print("persona: " + str(torch_persona_features))
 
     #go through all snippets and do bilinear with persona
+    count = 0
     for snippet in range(0, len(torch_snippet_features)):
         m = torch.nn.Bilinear(distilbert_size, distilbert_size, distilbert_size)
-
-        print("current snippet: " + str(torch_snippet_features[snippet]))
+        #print("current snippet: " + str(torch_snippet_features[snippet]))
         output = m(torch_persona_features, torch_snippet_features[snippet])
-        print("output from bilinear: " + str(output))
-        print()
+        #print("output from bilinear: " + str(output))
+        #print()
+        count += 1
+        print("count is now " + str(count))"""
 
-    #do the above for all the snippets we have.
+
+"""Function to add padding to input ids, as well as a mask"""
+def add_padding_and_mask(input_ids_list):
+    max_input_len = 0
+    for ids in input_ids_list:
+        if len(ids) > max_input_len:
+            max_input_len = len(ids)
+
+
+    padded_arr = np.array([i + [0]*(max_input_len-len(i)) for i in input_ids_list])
+
+    #masking- create another variable to mask the padding we've created for persona and snippets
+    attention_mask = np.where(padded_arr != 0, 1, 0)
+
+    return padded_arr, attention_mask
+
 
 
 
