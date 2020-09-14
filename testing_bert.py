@@ -93,70 +93,68 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
 
     num_epochs = 1
-    batch_size = 32
-    snippet_input_ids_list = []
+    #batch_size = 32
+    distilbert_size = 768
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-    #training snippets for this particular persona
-    #go through the current batch and encode all snippets in the batch.
-    #add snippet input ids (encoding) to list using extend
+    #training snippets for this particular persona, not in batches
+    #only compare one snippet and the current persona at a time so that can calculate bilinear loss for
+    #each
+    print("length of training set: " + str(training_size))
+
     for epoch in range(0, num_epochs):
         persona_convo = ' '.join(persona_convo)
-        print("size of convo: " + str(len(persona_convo)))
+
         persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-
-        for batch in range(0, len(snippet_list), batch_size):
-
+        for i in range(0, training_size):
             #handling the last batch (if less than 32)
-            if batch + batch_size > len(snippet_list):
-                batch_size = len(snippet_list) - batch
 
-            for batch_snippet in range(batch, batch + batch_size):
-                curr_snippet = ' '.join(snippet_list[batch_snippet])
-                snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
-                snippet_input_ids_list.extend(snippet_encoding)
-
-            #print("batch size: " + str(batch_size))
+            curr_snippet = ' '.join(snippet_list[i])
+            snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
+            #snippet_input_ids.extend(snippet_encoding)
 
             padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
-            padded_snippet_list, snippet_attention_mask = add_padding_and_mask(snippet_input_ids_list)
+            padded_snippet, snippet_attention_mask = add_padding_and_mask(snippet_encoding)
 
             persona_input_ids = torch.from_numpy(padded_persona).float().to(device)
-            snippet_input_ids = torch.from_numpy(padded_snippet_list).float().to(device)
+            snippet_input_ids = torch.from_numpy(padded_snippet).float().to(device)
             snippet_attention_mask = torch.tensor(snippet_attention_mask).to(device)
 
-            #print("persona tensor: " + str(persona_input_ids))
-            #print("snippet list tensor: " + str(snippet_input_ids) + ", batch: " + str(batch))
+            #print("snippet list tensor: " + str(snippet_input_ids) + ", snippet #: " + str(i))
             #print()
+            
+
+            #we want a scalar output after passing a persona and snippet embedding, both of length 768
+            m = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
+            convo_classifier = DistilBertandBilinear(persona_model, snippet_model, persona_input_ids, snippet_input_ids, m)
+            print("persona distilbert is: " + str(convo_classifier.persona_distilbert))
+            print("snippet distilbert is: " + str(convo_classifier.snippet_distilbert))
+            break
 
 
 
 
+
+class DistilBertandBilinear:
+
+    #for distilbert, we need persona_input_ids and snippet_input_ids, as well as the distilbert model
+    #for bilinear, we just need the feature vector output from distilbert- the embedding for persona and snippet, as well
+    #as the bilinear model
+
+
+    def __init__(self, persona_distilbert, snippet_distilbert, persona_input_ids, snippet_input_ids, bilinear_layer):
+        self.persona_distilbert = persona_distilbert
+        self.snippet_distilbert = snippet_distilbert
+        self.persona_input_ids = persona_input_ids
+        self.snippet_input_ids = snippet_input_ids
+        self.bilinear_layer = bilinear_layer
 
 
 
 
     """
 
-    #padding list of snippets
-    max_snippet_len = 0
-    for snippet_ids in snippet_input_ids_list:
-        if len(snippet_ids) > max_snippet_len:
-            max_snippet_len = len(snippet_ids)
-
-
-    padded_snippet_list = np.array([i + [0]*(max_snippet_len-len(i)) for i in snippet_input_ids_list])
-
-
-    #masking- create another variable to mask the padding we've created for persona and snippets
-    snippet_attention_mask = np.where(padded_snippet_list != 0, 1, 0)
-
-
-    #processing with BERT, create input tensor for persona and snippet list
-    persona_input_ids = torch.tensor(np.array(padded_persona))
-    snippet_input_ids = torch.tensor(np.array(padded_snippet_list))
-    snippet_attention_mask = torch.tensor(snippet_attention_mask)
 
     persona_model.train()
     snippet_model.eval()
@@ -196,6 +194,9 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
         #print()
         count += 1
         print("count is now " + str(count))"""
+
+
+
 
 
 """Function to add padding to input ids, as well as a mask"""
