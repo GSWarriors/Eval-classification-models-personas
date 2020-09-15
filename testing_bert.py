@@ -124,8 +124,8 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
             padded_snippet, snippet_attention_mask = add_padding_and_mask(snippet_encoding)
 
-            persona_input_ids = torch.from_numpy(padded_persona).type(torch.LongTensor).to(device)
-            snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.LongTensor).to(device)
+            persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(device)
+            snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(device)
             snippet_attention_mask = torch.tensor(snippet_attention_mask).to(device)
 
 
@@ -133,7 +133,9 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             m = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
             convo_classifier = DistilBertandBilinear(persona_model, snippet_model, persona_input_ids, snippet_input_ids, m, loss, same_convo)
             curr_loss = convo_classifier.forward()
-            break
+            print("calculating loss for snippet: " + str(i))
+
+        print("done!")
 
 
 
@@ -177,30 +179,24 @@ class DistilBertandBilinear:
         persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
         snippet_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
 
-        #print("persona feature vector from distilbert: " + str(persona_features))
-        #print()
-        #print("snippet feature vector from distilbert: " + str(snippet_features))
-
         #since we want to use this tensor as a trainable parameter, we need to
-        #compute gradients so we can update the tensor's values.
-        torch_persona_features = torch.tensor(persona_features[0])
-        torch_snippet_features = torch.tensor(snippet_features[0])
-
+        #compute gradients so we can update the tensor's values. we calculate loss from persona and snippet
+        torch_persona_features = torch.tensor(persona_features[0], requires_grad=True, dtype=torch.float, device=device)
+        torch_snippet_features = torch.tensor(snippet_features[0], requires_grad=True, dtype=torch.float, device=device)
         #print("persona features in tensor: " + str(torch_persona_features))
         #print("snippet features in tensor: " + )
 
-#a = torch.randn(1, requires_grad=True, dtype=torch.float, device=device)
-#b = torch.randn(1, requires_grad=True, dtype=torch.float, device=device)
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        print("output from bilinear: " + str(output))
         output_num = output.item()
 
-        duplicated_output = torch.tensor([[output_num, output_num]])
-        #print("shape of duplicated output: " + str(duplicated_output.shape))
+        duplicated_output = torch.tensor([[output_num, output_num]], requires_grad=True, dtype=torch.float, device=device)
         same_convo_tensor = torch.tensor(self.same_convo)
         curr_loss = self.loss(duplicated_output, same_convo_tensor)
-        print("current loss" + str(curr_loss))
+        #print("current loss: " + str(curr_loss))
+
+        #compute gradients (minimize cost)
+        curr_loss.backward()
 
 
 
