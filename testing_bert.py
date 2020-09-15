@@ -117,19 +117,15 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
             padded_snippet, snippet_attention_mask = add_padding_and_mask(snippet_encoding)
 
-            persona_input_ids = torch.from_numpy(padded_persona).float().to(device)
-            snippet_input_ids = torch.from_numpy(padded_snippet).float().to(device)
+            persona_input_ids = torch.from_numpy(padded_persona).type(torch.LongTensor).to(device)
+            snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.LongTensor).to(device)
             snippet_attention_mask = torch.tensor(snippet_attention_mask).to(device)
 
-            #print("snippet list tensor: " + str(snippet_input_ids) + ", snippet #: " + str(i))
-            #print()
-            
 
             #we want a scalar output after passing a persona and snippet embedding, both of length 768
             m = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
             convo_classifier = DistilBertandBilinear(persona_model, snippet_model, persona_input_ids, snippet_input_ids, m)
-            print("persona distilbert is: " + str(convo_classifier.persona_distilbert))
-            print("snippet distilbert is: " + str(convo_classifier.snippet_distilbert))
+            convo_classifier.forward()
             break
 
 
@@ -151,26 +147,39 @@ class DistilBertandBilinear:
         self.bilinear_layer = bilinear_layer
 
 
+    def forward(self):
+        #pass snippet into snippet distilbert, and persona into persona distilbert
+
+        self.persona_distilbert.train()
+        self.snippet_distilbert.eval()
+
+        with torch.enable_grad():
+            persona_hidden_states = self.persona_distilbert(self.persona_input_ids)
+
+        with torch.no_grad():
+            snippet_hidden_states = self.snippet_distilbert(self.snippet_input_ids)
+
+
+        #everything in last_hidden_states, now unpack 3-d output tensor.
+        #features is 2d array with sentence embeddings of all sentences in dataset.
+        #the model treats the entire persona as one "sentence"
+        persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
+        snippet_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
+
+        print("persona feature vector from distilbert: " + str(persona_features))
+        print()
+        print("snippet feature vector from distilbert: " + str(snippet_features))
+
+        torch_persona_features = torch.from_numpy(persona_features[0])
+        torch_snippet_features = torch.from_numpy(snippet_features[0])
+
+        combined_embedding = self.bilinear_layer(torch_persona_features, torch_snippet_features)
+        print("output from bilinear: " + str(combined_embedding))
 
 
     """
 
 
-    persona_model.train()
-    snippet_model.eval()
-
-    with torch.enable_grad():
-        persona_hidden_states = persona_model(persona_input_ids)
-
-    with torch.no_grad():
-        snippet_hidden_states = snippet_model(snippet_input_ids, attention_mask = snippet_attention_mask)
-
-
-    #everything in last_hidden_states, now unpack 3-d output tensor.
-    #features is 2d array with sentence embeddings of all sentences in dataset.
-    #the model treats the entire persona as the "sentence". persona encoding
-    persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
-    snippet_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
     #combine using bilinear layer, then use crossentropy loss.
 
 
