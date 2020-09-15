@@ -4,6 +4,7 @@ import pandas as pd
 import transformers as ppb  #pytorch transformers
 #from transformers import BertTokenizer, BertForNextSentencePrediction
 import torch
+from torch import autograd
 import random as rand
 import time
 import math
@@ -101,14 +102,20 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     #training snippets for this particular persona, not in batches
     #only compare one snippet and the current persona at a time so that can calculate bilinear loss for
     #each
-    print("length of training set: " + str(training_size))
+    #print("length of training set: " + str(training_size))
+    loss = torch.nn.CrossEntropyLoss()
 
     for epoch in range(0, num_epochs):
         persona_convo = ' '.join(persona_convo)
+        persona_num = 0
 
         persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
         for i in range(0, training_size):
             #handling the last batch (if less than 32)
+            if persona_num == i:
+                same_convo = [1]
+            else:
+                same_convo = [0]
 
             curr_snippet = ' '.join(snippet_list[i])
             snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
@@ -124,14 +131,17 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
             #we want a scalar output after passing a persona and snippet embedding, both of length 768
             m = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
-            convo_classifier = DistilBertandBilinear(persona_model, snippet_model, persona_input_ids, snippet_input_ids, m)
-            convo_classifier.forward()
+            convo_classifier = DistilBertandBilinear(persona_model, snippet_model, persona_input_ids, snippet_input_ids, m, loss, same_convo)
+            curr_loss = convo_classifier.forward()
             break
 
 
 
 
-
+"""This is the class for passing in the distilbert and bilinear function for the model we've created
+Hidden states: everything in last_hidden_states, now unpack 3-d output tensor.
+        #features is 2d array with sentence embeddings of all sentences in dataset.
+        #the model treats the entire persona as one "sentence"""
 class DistilBertandBilinear:
 
     #for distilbert, we need persona_input_ids and snippet_input_ids, as well as the distilbert model
@@ -139,17 +149,21 @@ class DistilBertandBilinear:
     #as the bilinear model
 
 
-    def __init__(self, persona_distilbert, snippet_distilbert, persona_input_ids, snippet_input_ids, bilinear_layer):
+    def __init__(self, persona_distilbert, snippet_distilbert, persona_input_ids, snippet_input_ids, bilinear_layer, loss, same_convo):
         self.persona_distilbert = persona_distilbert
         self.snippet_distilbert = snippet_distilbert
         self.persona_input_ids = persona_input_ids
         self.snippet_input_ids = snippet_input_ids
         self.bilinear_layer = bilinear_layer
+        self.loss = loss
+        self.same_convo = same_convo
 
 
     def forward(self):
-        #pass snippet into snippet distilbert, and persona into persona distilbert
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+
+        #pass snippet into snippet distilbert, and persona into persona distilbert
         self.persona_distilbert.train()
         self.snippet_distilbert.eval()
 
@@ -160,21 +174,34 @@ class DistilBertandBilinear:
             snippet_hidden_states = self.snippet_distilbert(self.snippet_input_ids)
 
 
-        #everything in last_hidden_states, now unpack 3-d output tensor.
-        #features is 2d array with sentence embeddings of all sentences in dataset.
-        #the model treats the entire persona as one "sentence"
         persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
         snippet_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
 
-        print("persona feature vector from distilbert: " + str(persona_features))
-        print()
-        print("snippet feature vector from distilbert: " + str(snippet_features))
+        #print("persona feature vector from distilbert: " + str(persona_features))
+        #print()
+        #print("snippet feature vector from distilbert: " + str(snippet_features))
 
-        torch_persona_features = torch.from_numpy(persona_features[0])
-        torch_snippet_features = torch.from_numpy(snippet_features[0])
+        #since we want to use this tensor as a trainable parameter, we need to
+        #compute gradients so we can update the tensor's values.
+        torch_persona_features = torch.tensor(persona_features[0])
+        torch_snippet_features = torch.tensor(snippet_features[0])
 
-        combined_embedding = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        print("output from bilinear: " + str(combined_embedding))
+        #print("persona features in tensor: " + str(torch_persona_features))
+        #print("snippet features in tensor: " + )
+
+#a = torch.randn(1, requires_grad=True, dtype=torch.float, device=device)
+#b = torch.randn(1, requires_grad=True, dtype=torch.float, device=device)
+
+        output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
+        print("output from bilinear: " + str(output))
+        output_num = output.item()
+
+        duplicated_output = torch.tensor([[output_num, output_num]])
+        #print("shape of duplicated output: " + str(duplicated_output.shape))
+        same_convo_tensor = torch.tensor(self.same_convo)
+        curr_loss = self.loss(duplicated_output, same_convo_tensor)
+        print("current loss" + str(curr_loss))
+
 
 
     """
