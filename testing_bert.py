@@ -112,7 +112,7 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
         persona_convo = ' '.join(persona_convo)
         persona_num = 0
 
-        persona_encoding = persona_tokenizer.encode(persona_convo, add_special_tokens=True)
+        persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
         gold_snippet_encoding = snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)
 
         for i in range(0, training_size, snippet_set_size):
@@ -137,9 +137,8 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
                 encoded_snippet_set.extend([snippet_encoding])
             encoded_snippet_set.extend([gold_snippet_encoding])
 
+            convo_classifier.forward(persona_encoding)
 
-            print(len(encoded_snippet_set))
-        print("done!")
 
 
         """if persona_num == i:
@@ -183,8 +182,22 @@ class DistilBertandBilinear:
 
 
 
-    def forward(self):
+    def forward(self, persona_encoding):
+        #persona stuff here, snippet stuff earlier
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
+        persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(device)
+        print("tensor: " + str(persona_input_ids))
+
+        #since we want to use this tensor as a trainable parameter, we need to
+        #compute gradients so we can update the tensor's values. we calculate loss from persona and snippet
+
+        #persona_set_tensor = torch.nn.replicate(torch_persona_features, encoded_snippet_set_len)
+        #print("persona embedding is: " + str(persona_set_tensor))
+        #print("shape: " + str(persona_set_tensor.shape))
+
+        """
 
 
         #pass snippet into snippet distilbert, and persona into persona distilbert
@@ -215,19 +228,16 @@ class DistilBertandBilinear:
         duplicated_output = torch.tensor([[output_num, output_num]], requires_grad=True, dtype=torch.float, device=device)
         same_convo_tensor = torch.tensor(self.same_convo)
         curr_loss = self.loss(duplicated_output, same_convo_tensor)
-        print("current loss: " + str(curr_loss))
+        print("current loss: " + str(curr_loss))"""
 
 
-
-
-    """
 
 
     #combine using bilinear layer, then use crossentropy loss.
 
 
 
-    distilbert_size = persona_features.shape[1]
+    """distilbert_size = persona_features.shape[1]
     torch_persona_features = torch.from_numpy(persona_features[0])
     torch_snippet_features = torch.from_numpy(snippet_features)
     print("shape of persona: " + str(persona_features.shape))
