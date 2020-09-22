@@ -60,7 +60,7 @@ def main(df):
     print()
 
 
-    tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_list)
+    tokenization_and_feature_extraction(first_persona, first_snippet_convo, snippet_list)
 
 
 
@@ -108,26 +108,27 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     convo_classifier = DistilBertandBilinear(persona_model, bi_layer)
     snippet_set_size = 7
 
+
     for epoch in range(0, num_epochs):
         persona_convo = ' '.join(persona_convo)
         persona_num = 0
 
+        #print("persona is: " + str(persona_convo))
+        #print()
         persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
         gold_snippet_encoding = snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)
 
+        #distractor set creation
         for i in range(0, training_size, snippet_set_size):
-            if i + 7 > training_size:
+            if i + snippet_set_size > training_size:
                 snippet_set_size = training_size - i
                 snippet_set = snippet_list[i: i+snippet_set_size]
-                #print("last snippet set here.")
-            #handling the last batch (if less than 32)
-            elif i + 7 <= training_size and (persona_num < i or persona_num > i + 7):
+
+            elif i + snippet_set_size <= training_size and (persona_num < i or persona_num > i + snippet_set_size):
                 snippet_set = snippet_list[i: i+snippet_set_size]
-                #print("persona not in this set!")
             else:
-                if i + 8 <= training_size and (persona_num >= i and persona_num <= i + 7):
+                if i + snippet_set_size + 1 <= training_size and (persona_num >= i and persona_num <= i + snippet_set_size):
                     snippet_set = snippet_list[i:persona_num] + snippet_list[persona_num + 1: i+snippet_set_size + 1]
-                    #print("persona in this set!")
 
             #join, add encoding, and add to a list. also add the gold snippet
             encoded_snippet_set = []
@@ -137,29 +138,30 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
                 encoded_snippet_set.extend([snippet_encoding])
             encoded_snippet_set.extend([gold_snippet_encoding])
 
+            #the last snippet is the matching one
+            labels_list = [0]*snippet_set_size
+            labels_list.extend([1])
+            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=device)
+            print("labels tensor is: " + str(labels))
 
-            convo_classifier.forward(persona_encoding, len(encoded_snippet_set))
+            padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
+            snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(device)
+            snippet_model.eval()
+
+            with torch.no_grad():
+                snippet_hidden_states = snippet_model(snippet_input_ids)
+
+            #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set
+            snippet_set_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
+            torch_snippet_features = torch.tensor(snippet_set_features, requires_grad=True, dtype=torch.float, device=device)
+            #print("snippet set tensor: " + str(torch_snippet_features))
+            #print()
+
+
+            model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), snippet_set, torch_snippet_features, labels_list)
+            """curr_loss = loss(model_output, labels)
+            print("current loss: " + str(curr_loss))"""
             break
-
-
-
-        """if persona_num == i:
-            same_convo = [1]
-        else:
-            same_convo = [0]
-
-
-        #detect the gold snippet and encode it. then encode 7 other snippets down the line
-
-        curr_snippet = ' '.join(snippet_list[i])
-        snippet_encoding = [snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)]
-
-        padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
-        padded_snippet, snippet_attention_mask = add_padding_and_mask(snippet_encoding)
-
-        persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(device)
-        snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(device)
-        snippet_attention_mask = torch.tensor(snippet_attention_mask).to(device)"""
 
 
 
@@ -171,17 +173,15 @@ Hidden states: everything in last_hidden_states, now unpack 3-d output tensor.
         #the model treats the entire persona as one "sentence"""
 class DistilBertandBilinear:
 
-    #for distilbert, we need persona_input_ids and snippet_input_ids, as well as the distilbert model
-    #for bilinear, we just need the feature vector output from distilbert- the embedding for persona and snippet, as well
-    #as the bilinear model
-
     def __init__(self, persona_distilbert, bilinear_layer):
         self.persona_distilbert = persona_distilbert
         self.bilinear_layer = bilinear_layer
 
 
 
-    def forward(self, persona_encoding, snippet_set_len):
+    def forward(self, persona_encoding, snippet_set_len, snippet_set, torch_snippet_features, labels=None):
+
+
         #persona stuff here, snippet stuff earlier
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -197,19 +197,15 @@ class DistilBertandBilinear:
         repl_persona_features = np.tile(persona_features, (snippet_set_len, 1))
         torch_persona_features = torch.tensor(repl_persona_features, requires_grad=True, dtype=torch.float, device=device)
 
-        print(str(torch_persona_features))
-        #output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        #output_num = output.item()
+        #print("persona tensor: " + str(torch_persona_features))
+        #print()
 
-
-        """
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        output_num = output.item()
 
-        duplicated_output = torch.tensor([[output_num, output_num]], requires_grad=True, dtype=torch.float, device=device)
-        same_convo_tensor = torch.tensor(self.same_convo)
-        curr_loss = self.loss(duplicated_output, same_convo_tensor)
-        print("current loss: " + str(curr_loss))"""
+        print("output of bilinear: " + str(output))
+        print()
+        return output
+
 
 
 
