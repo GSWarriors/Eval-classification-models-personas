@@ -4,10 +4,10 @@ import pandas as pd
 import transformers as ppb  #pytorch transformers
 #from transformers import BertTokenizer, BertForNextSentencePrediction
 import torch
-from torch import autograd
 import random as rand
 import time
 import math
+import itertools
 
 
 
@@ -91,21 +91,15 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     #separate snippets into training and validation sets
     training_size = math.floor(0.8*len(snippet_list))
     validation_size = len(snippet_list) - training_size
-
-
     num_epochs = 1
-    #batch_size = 32
     distilbert_size = 768
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-
-    #training snippets for this particular persona, not in batches
-    #only compare one snippet and the current persona at a time so that can calculate bilinear loss for
-    #each
-    #print("length of training set: " + str(training_size))
     loss = torch.nn.CrossEntropyLoss()
     bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
     convo_classifier = DistilBertandBilinear(persona_model, bi_layer)
+
+    #optimizer = torch.optim.AdamW(persona_encoding, lr = 0.0001)
     snippet_set_size = 7
 
 
@@ -140,9 +134,12 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
             #the last snippet is the matching one
             labels_list = [0]*snippet_set_size
-            labels_list.extend([1])
+            gold_label = [1]
+            labels_list = labels_list + gold_label
+
             labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=device)
             print("labels tensor is: " + str(labels))
+            print("label shape: " + str(labels.shape))
 
             padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
             snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(device)
@@ -154,13 +151,11 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set
             snippet_set_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
             torch_snippet_features = torch.tensor(snippet_set_features, requires_grad=True, dtype=torch.float, device=device)
-            #print("snippet set tensor: " + str(torch_snippet_features))
-            #print()
 
-
-            model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), snippet_set, torch_snippet_features, labels_list)
-            """curr_loss = loss(model_output, labels)
-            print("current loss: " + str(curr_loss))"""
+            convo_classifier.persona_distilbert.train()
+            model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
+            curr_loss = loss(model_output, labels)
+            print("current loss: " + str(curr_loss))
             break
 
 
@@ -179,15 +174,11 @@ class DistilBertandBilinear:
 
 
 
-    def forward(self, persona_encoding, snippet_set_len, snippet_set, torch_snippet_features, labels=None):
-
-
-        #persona stuff here, snippet stuff earlier
+    def forward(self, persona_encoding, snippet_set_len, torch_snippet_features):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
         persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(device)
-        self.persona_distilbert.train()
 
         with torch.enable_grad():
             persona_hidden_states = self.persona_distilbert(persona_input_ids)
@@ -197,14 +188,11 @@ class DistilBertandBilinear:
         repl_persona_features = np.tile(persona_features, (snippet_set_len, 1))
         torch_persona_features = torch.tensor(repl_persona_features, requires_grad=True, dtype=torch.float, device=device)
 
-        #print("persona tensor: " + str(torch_persona_features))
-        #print()
-
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-
-        print("output of bilinear: " + str(output))
-        print()
-        return output
+        output_repl = output.repeat(1, 2)
+        print("bilinear output: " + str(output_repl))
+        print("shape: " + str(output_repl.shape))
+        return output_repl
 
 
 
