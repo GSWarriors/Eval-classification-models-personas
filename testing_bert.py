@@ -98,8 +98,7 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     loss = torch.nn.CrossEntropyLoss()
     bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
     convo_classifier = DistilBertandBilinear(persona_model, bi_layer)
-
-    #optimizer = torch.optim.AdamW(persona_encoding, lr = 0.0001)
+    #optimizer = AdamW(convo_classifier.parameters(), lr=0.01)
     snippet_set_size = 7
 
 
@@ -111,6 +110,8 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
         #print()
         persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
         gold_snippet_encoding = snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)
+        convo_classifier.persona_distilbert.train()
+        snippet_model.eval()
 
         #distractor set creation
         for i in range(0, training_size, snippet_set_size):
@@ -138,12 +139,10 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             labels_list = labels_list + gold_label
 
             labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=device)
-            print("labels tensor is: " + str(labels))
-            print("label shape: " + str(labels.shape))
+            #print("labels tensor is: " + str(labels))
 
             padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
             snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(device)
-            snippet_model.eval()
 
             with torch.no_grad():
                 snippet_hidden_states = snippet_model(snippet_input_ids)
@@ -152,11 +151,14 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             snippet_set_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
             torch_snippet_features = torch.tensor(snippet_set_features, requires_grad=True, dtype=torch.float, device=device)
 
-            convo_classifier.persona_distilbert.train()
+            #return the persona features as well as the bilinear layer output. then declare optimizer if just entered training
+            #loop for persona
             model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
+
             curr_loss = loss(model_output, labels)
-            print("current loss: " + str(curr_loss))
-            break
+            curr_loss.backward()
+            print("loss is now: " + str(curr_loss))
+            print()
 
 
 
@@ -166,19 +168,20 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 Hidden states: everything in last_hidden_states, now unpack 3-d output tensor.
         #features is 2d array with sentence embeddings of all sentences in dataset.
         #the model treats the entire persona as one "sentence"""
-class DistilBertandBilinear:
+class DistilBertandBilinear(torch.nn.Module):
 
     def __init__(self, persona_distilbert, bilinear_layer):
+        super().__init__()
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.persona_distilbert = persona_distilbert
         self.bilinear_layer = bilinear_layer
 
 
-
+    #can modify to find hidden states without detaching to numpy? (requires more computation)
     def forward(self, persona_encoding, snippet_set_len, torch_snippet_features):
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
         padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
-        persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(device)
+        persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(self.device)
 
         with torch.enable_grad():
             persona_hidden_states = self.persona_distilbert(persona_input_ids)
@@ -186,12 +189,12 @@ class DistilBertandBilinear:
         #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set
         persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
         repl_persona_features = np.tile(persona_features, (snippet_set_len, 1))
-        torch_persona_features = torch.tensor(repl_persona_features, requires_grad=True, dtype=torch.float, device=device)
+        torch_persona_features = torch.tensor(repl_persona_features, requires_grad=True, dtype=torch.float, device=self.device)
+        #print("torch gradient: " + str(torch_persona_features.grad))
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
         output_repl = output.repeat(1, 2)
-        print("bilinear output: " + str(output_repl))
-        print("shape: " + str(output_repl.shape))
+        #print("bilinear output: " + str(output_repl))
         return output_repl
 
 
