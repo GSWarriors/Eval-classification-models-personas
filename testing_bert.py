@@ -83,12 +83,12 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     num_added_toks = persona_tokenizer.add_special_tokens(special_tokens_dict)
     snippet_tokenizer.add_special_tokens(special_tokens_dict)
 
-    #print("number of added tokens: " + str(num_added_toks))
     persona_model.resize_token_embeddings(len(persona_tokenizer))
     snippet_model.resize_token_embeddings(len(snippet_tokenizer))
 
 
-    #separate snippets into training and validation sets
+    #separate snippets into training and validation sets. create optimizer with
+    #parameter tensors from Distilbert and Bilinear class
     training_size = math.floor(0.8*len(snippet_list))
     validation_size = len(snippet_list) - training_size
     num_epochs = 1
@@ -97,17 +97,16 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
     loss = torch.nn.CrossEntropyLoss()
     bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
-    convo_classifier = DistilBertandBilinear(persona_model, bi_layer)
-    #optimizer = AdamW(convo_classifier.parameters(), lr=0.01)
+    convo_classifier = DistilBertandBilinear(persona_model, bi_layer).to(device)
+    optimizer = torch.optim.AdamW(convo_classifier.parameters(), lr=0.001)
     snippet_set_size = 7
+
 
 
     for epoch in range(0, num_epochs):
         persona_convo = ' '.join(persona_convo)
         persona_num = 0
 
-        #print("persona is: " + str(persona_convo))
-        #print()
         persona_encoding = [persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
         gold_snippet_encoding = snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)
         convo_classifier.persona_distilbert.train()
@@ -151,14 +150,17 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             snippet_set_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
             torch_snippet_features = torch.tensor(snippet_set_features, requires_grad=True, dtype=torch.float, device=device)
 
-            #return the persona features as well as the bilinear layer output. then declare optimizer if just entered training
-            #loop for persona
             model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
-
             curr_loss = loss(model_output, labels)
-            curr_loss.backward()
-            print("loss is now: " + str(curr_loss))
+            print("loss is now: " + str(curr_loss.item()))
             print()
+
+            curr_loss.backward()
+
+            #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
+            #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
+            optimizer.step()
+            optimizer.zero_grad()
 
 
 
@@ -190,14 +192,14 @@ class DistilBertandBilinear(torch.nn.Module):
         persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
         repl_persona_features = np.tile(persona_features, (snippet_set_len, 1))
         torch_persona_features = torch.tensor(repl_persona_features, requires_grad=True, dtype=torch.float, device=self.device)
-        #print("torch gradient: " + str(torch_persona_features.grad))
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
+        #rand_tensor = torch.tensor([[0, 1]]).to(self.device)
+        #output_random = output*rand_tensor
+        #print("output random is: " + str(output_random))
         output_repl = output.repeat(1, 2)
-        #print("bilinear output: " + str(output_repl))
+        print("bilinear output: " + str(output_repl))
         return output_repl
-
-
 
 
 
