@@ -9,6 +9,15 @@ import time
 import math
 import itertools
 
+#an example
+"""input = torch.randn(3, 5, requires_grad=True)
+target = torch.empty(3, dtype=torch.long).random_(5)
+output = loss(input, target)
+output.backward()
+print("input is: " + str(input))
+print("target is: " + str(target))
+print("loss is: " + str(output))
+print()"""
 
 
 
@@ -95,12 +104,13 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     distilbert_size = 768
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    loss = torch.nn.CrossEntropyLoss()
+    sigmoid = torch.nn.Sigmoid()
+    binary_loss = torch.nn.BCELoss()
+    #loss = torch.nn.CrossEntropyLoss()
     bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
     convo_classifier = DistilBertandBilinear(persona_model, bi_layer).to(device)
-    optimizer = torch.optim.AdamW(convo_classifier.parameters(), lr=0.001)
+    optimizer = torch.optim.AdamW(convo_classifier.parameters(), lr=0.0001)
     snippet_set_size = 7
-
 
 
     for epoch in range(0, num_epochs):
@@ -137,7 +147,7 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             gold_label = [1]
             labels_list = labels_list + gold_label
 
-            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=device)
+            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=device)
             #print("labels tensor is: " + str(labels))
 
             padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
@@ -151,17 +161,17 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             torch_snippet_features = torch.tensor(snippet_set_features, requires_grad=True, dtype=torch.float, device=device)
 
             model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
-            curr_loss = loss(model_output, labels)
-            print("loss is now: " + str(curr_loss.item()))
-            print()
+            model_sigmoid = sigmoid(model_output)
+            print("normalized output: " + str(model_sigmoid))
 
+            curr_loss = binary_loss(model_sigmoid, labels)
+            #curr_loss = loss(model_output, labels)
+            print("binary loss is now: " + str(curr_loss.item()))
             curr_loss.backward()
-
             #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
             #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
             optimizer.step()
             optimizer.zero_grad()
-
 
 
 
@@ -194,12 +204,12 @@ class DistilBertandBilinear(torch.nn.Module):
         torch_persona_features = torch.tensor(repl_persona_features, requires_grad=True, dtype=torch.float, device=self.device)
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        #rand_tensor = torch.tensor([[0, 1]]).to(self.device)
-        #output_random = output*rand_tensor
-        #print("output random is: " + str(output_random))
-        output_repl = output.repeat(1, 2)
-        print("bilinear output: " + str(output_repl))
-        return output_repl
+        squeezed_output = torch.squeeze(output, 1)
+        print("output squeezed is: " + str(squeezed_output))
+        print()
+
+        #output_repl = output.repeat(1, 2)
+        return squeezed_output
 
 
 
@@ -213,7 +223,6 @@ def add_padding_and_mask(input_ids_list):
 
 
     padded_arr = np.array([i + [0]*(max_input_len-len(i)) for i in input_ids_list])
-
     #masking- create another variable to mask the padding we've created for persona and snippets
     attention_mask = np.where(padded_arr != 0, 1, 0)
 
