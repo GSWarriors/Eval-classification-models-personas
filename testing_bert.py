@@ -104,12 +104,11 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
     distilbert_size = 768
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    sigmoid = torch.nn.Sigmoid()
     binary_loss = torch.nn.BCELoss()
-    #loss = torch.nn.CrossEntropyLoss()
     bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
     convo_classifier = DistilBertandBilinear(persona_model, bi_layer).to(device)
-    optimizer = torch.optim.AdamW(convo_classifier.parameters(), lr=0.0001)
+    optimizer = torch.optim.AdamW(convo_classifier.parameters(), lr=0.001)
+    #model_output = torch.empty(8, 1)
     snippet_set_size = 7
 
 
@@ -148,7 +147,6 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             labels_list = labels_list + gold_label
 
             labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=device)
-            #print("labels tensor is: " + str(labels))
 
             padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
             snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(device)
@@ -156,22 +154,27 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             with torch.no_grad():
                 snippet_hidden_states = snippet_model(snippet_input_ids)
 
-            #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set
+            #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
+            #afterwards, normalize the output with sigmoid function
             snippet_set_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
             torch_snippet_features = torch.tensor(snippet_set_features, requires_grad=True, dtype=torch.float, device=device)
 
             model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
-            model_sigmoid = sigmoid(model_output)
-            print("normalized output: " + str(model_sigmoid))
 
-            curr_loss = binary_loss(model_sigmoid, labels)
-            #curr_loss = loss(model_output, labels)
-            print("binary loss is now: " + str(curr_loss.item()))
+            curr_loss = binary_loss(model_output, labels)
+            #print("binary loss is now: " + str(curr_loss.item()))
+            print("snippet number: " + str(i))
+            #print()
             curr_loss.backward()
             #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
             #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
             optimizer.step()
             optimizer.zero_grad()
+
+
+
+
+
 
 
 
@@ -192,6 +195,7 @@ class DistilBertandBilinear(torch.nn.Module):
     #can modify to find hidden states without detaching to numpy? (requires more computation)
     def forward(self, persona_encoding, snippet_set_len, torch_snippet_features):
 
+        sigmoid = torch.nn.Sigmoid()
         padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
         persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(self.device)
 
@@ -199,17 +203,17 @@ class DistilBertandBilinear(torch.nn.Module):
             persona_hidden_states = self.persona_distilbert(persona_input_ids)
 
         #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set
-        persona_features = persona_hidden_states[0][:, 0, :].detach().numpy()
-        repl_persona_features = np.tile(persona_features, (snippet_set_len, 1))
-        torch_persona_features = torch.tensor(repl_persona_features, requires_grad=True, dtype=torch.float, device=self.device)
+        persona_features = persona_hidden_states[0][:, 0, :]
+        repl_persona_features = persona_features.repeat(snippet_set_len, 1)
+        torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
+        #print("torch repeated is: " + str(repl_persona_features))
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
         squeezed_output = torch.squeeze(output, 1)
-        print("output squeezed is: " + str(squeezed_output))
-        print()
+        model_output = sigmoid(squeezed_output)
+        #print("normalized output between 1 and 0: " + str(model_output))
 
-        #output_repl = output.repeat(1, 2)
-        return squeezed_output
+        return model_output
 
 
 
