@@ -9,16 +9,6 @@ import time
 import math
 import itertools
 
-#an example
-"""input = torch.randn(3, 5, requires_grad=True)
-target = torch.empty(3, dtype=torch.long).random_(5)
-output = loss(input, target)
-output.backward()
-print("input is: " + str(input))
-print("target is: " + str(target))
-print("loss is: " + str(output))
-print()"""
-
 
 
 def main(df):
@@ -28,24 +18,57 @@ def main(df):
     snippet_convo = []
     full_doc = df[0]
 
-
-    count = 0
-    convo_list = []
+    #convo_list = []
     filtered_convo = []
-    snippet_list = []
+    #snippet_list = []
 
-    first_persona = []
-    first_snippet_convo = []
+    #first_persona = []
+    #first_snippet_convo = []
 
     #go through full document, and append to convo list for 8 responses
     #(1 conversation). Then append these to a list, and get the persona and snippet
     #from it. Finally, reset convo_list to just the current line, and filtered_convo
 
     for line in range(0, len(full_doc)):
-        if line > 0 and line % 8 == 0:
+
+        filtered_line = filter_for_responses(full_doc[line])
+        first_char = filtered_line[0]
+        if line == 0:
+            first_response = filter_for_responses(full_doc[line])
+            filtered_convo = [first_response[2:]]
+        #break
+        elif first_char != '1' and line > 0:
+            response = filter_for_responses(full_doc[line])
+            filtered_convo.extend([response])
+
+        else:
+            #print convo, and persona. then, reset the filtered convo to just the current line (convo ended)
+            if first_char == '1' and line > 0:
+                print("filtered convo is: " + str(filtered_convo))
+                persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
+                first_response = filter_for_responses(full_doc[line])
+                filtered_convo = [first_response[2:]]
+                print("persona is: " + str(persona_convo))
+                print()
+
+
+        if line == 21:
+            break
+
+
+
+
+        """if line > 0 and line % 7 == 0:
+            print("line is: " + str(line))
             #convo_list = []
             for i in range(0, len(convo_list)):
                 filtered_convo.append(filter_for_responses(convo_list[i]))
+            print("filtered convo is: " + str(filtered_convo))
+            print("length is: " + str(len(filtered_convo)))
+            print()
+
+            if line == 21:
+                break
 
             persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
             if len(first_persona) == 0:
@@ -60,16 +83,18 @@ def main(df):
             convo_list = [full_doc[line]]
             filtered_convo = []
         else:
-            convo_list.append(full_doc[line])
+            convo_list.append(full_doc[line])"""
 
 
-    print("persona convo: " + str(first_persona))
+
+
+    """print("persona convo: " + str(first_persona))
     print()
     print("snippet convo: " + str(first_snippet_convo))
     print()
 
 
-    tokenization_and_feature_extraction(first_persona, first_snippet_convo, snippet_list)
+    tokenization_and_feature_extraction(first_persona, first_snippet_convo, snippet_list)"""
 
 
 
@@ -121,7 +146,7 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
         convo_classifier.persona_distilbert.train()
         snippet_model.eval()
 
-        #distractor set creation
+        #distractor set creation, going through training set
         for i in range(0, training_size, snippet_set_size):
             if i + snippet_set_size > training_size:
                 snippet_set_size = training_size - i
@@ -156,11 +181,10 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
 
             #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
             #afterwards, normalize the output with sigmoid function
-            snippet_set_features = snippet_hidden_states[0][:, 0, :].detach().numpy()
-            torch_snippet_features = torch.tensor(snippet_set_features, requires_grad=True, dtype=torch.float, device=device)
+            snippet_set_features = snippet_hidden_states[0][:, 0, :].to(device)
+            torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
             model_output = convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
-
             curr_loss = binary_loss(model_output, labels)
             #print("binary loss is now: " + str(curr_loss.item()))
             print("snippet number: " + str(i))
@@ -203,7 +227,7 @@ class DistilBertandBilinear(torch.nn.Module):
             persona_hidden_states = self.persona_distilbert(persona_input_ids)
 
         #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set
-        persona_features = persona_hidden_states[0][:, 0, :]
+        persona_features = persona_hidden_states[0][:, 0, :].to(self.device)
         repl_persona_features = persona_features.repeat(snippet_set_len, 1)
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
@@ -220,15 +244,15 @@ class DistilBertandBilinear(torch.nn.Module):
 
 """Function to add padding to input ids, as well as a mask"""
 def add_padding_and_mask(input_ids_list):
-    max_input_len = 0
-    for ids in input_ids_list:
-        if len(ids) > max_input_len:
-            max_input_len = len(ids)
-
-
+    #max_input_len = 0
+    max_input_len = max([len(ids) for ids in input_ids_list])
     padded_arr = np.array([i + [0]*(max_input_len-len(i)) for i in input_ids_list])
+    #padded_tensor_arr = torch.tensor([i + [0]*(max_input_len-len(i)) for i in input_ids_list])
     #masking- create another variable to mask the padding we've created for persona and snippets
+    print("padded arr is: " + str(padded_arr))
+
     attention_mask = np.where(padded_arr != 0, 1, 0)
+    #print("attention mask is: " + str(attention_mask))
 
     return padded_arr, attention_mask
 
@@ -255,11 +279,8 @@ def filter_persona_and_snippet(filtered_convo, snippet_size):
             del filtered_convo[rand_convo_index: rand_convo_index + snippet_size]
 
     persona_convo = filtered_convo
-
-
     persona_convo = add_speaker_tokens(persona_convo)
     snippet_convo = add_speaker_tokens(snippet_convo)
-
 
     return persona_convo, snippet_convo
 
@@ -306,12 +327,15 @@ def add_speaker_tokens(convo):
 
 #filters 1 back and forth between two speakers and returns the string
 def filter_for_responses(response):
-
-    response_without_number = response[2:]
+    #print("number is: " + str(response[0]))
+    number = response[0]
     tab_count = 0
     two_speaker_utterances = ""
 
-    for char in response_without_number:
+    if number != '1':
+        response = response[2:]
+
+    for char in response:
         if tab_count < 2:
             if char == '\t':
                 tab_count += 1
