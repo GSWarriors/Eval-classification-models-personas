@@ -18,8 +18,9 @@ def main(df):
     snippet_convo = []
     full_doc = df[0]
 
-    #convo_list = []
     filtered_convo = []
+    persona_list = []
+    snippet_list = []
     #snippet_list = []
 
     #first_persona = []
@@ -44,57 +45,25 @@ def main(df):
         else:
             #print convo, and persona. then, reset the filtered convo to just the current line (convo ended)
             if first_char == '1' and line > 0:
-                print("filtered convo is: " + str(filtered_convo))
                 persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
                 first_response = filter_for_responses(full_doc[line])
                 filtered_convo = [first_response[2:]]
-                print("persona is: " + str(persona_convo))
-                print()
+                """print("persona is: " + str(persona_convo))
+                print("snippet is: " + str(snippet_convo))
+                print()"""
 
+                if len(persona_list) < 2:
+                    persona_list.extend([persona_convo])
+                snippet_list.extend([snippet_convo])
 
-        if line == 21:
-            break
-
-
-
-
-        """if line > 0 and line % 7 == 0:
-            print("line is: " + str(line))
-            #convo_list = []
-            for i in range(0, len(convo_list)):
-                filtered_convo.append(filter_for_responses(convo_list[i]))
-            print("filtered convo is: " + str(filtered_convo))
-            print("length is: " + str(len(filtered_convo)))
-            print()
-
-            if line == 21:
-                break
-
-            persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
-            if len(first_persona) == 0:
-                first_persona = persona_convo
-
-            if len(first_snippet_convo) == 0:
-                first_snippet_convo = snippet_convo
-
-            snippet_list.append(snippet_convo)
-            #function here to add model, tokenizer, padding, and feature extraction
-
-            convo_list = [full_doc[line]]
-            filtered_convo = []
-        else:
-            convo_list.append(full_doc[line])"""
-
-
-
-
-    """print("persona convo: " + str(first_persona))
+    print("snippet list is: " + str(snippet_list))
     print()
-    print("snippet convo: " + str(first_snippet_convo))
-    print()
+    print("persona list is: " + str(persona_list))
 
 
-    tokenization_and_feature_extraction(first_persona, first_snippet_convo, snippet_list)"""
+
+
+    #tokenization_and_feature_extraction(first_persona, first_snippet_convo, snippet_list)
 
 
 
@@ -262,9 +231,9 @@ def add_padding_and_mask(input_ids_list):
 
 def filter_persona_and_snippet(filtered_convo, snippet_size):
 
-
     rand_convo_count = 0
     rand_convo_index = -1
+    snippet_convo = ""
     while rand_convo_count < 1:
         rand_convo_index = rand.randint(0, len(filtered_convo) - 1)
         rand_convo_count += 1
@@ -279,10 +248,11 @@ def filter_persona_and_snippet(filtered_convo, snippet_size):
             del filtered_convo[rand_convo_index: rand_convo_index + snippet_size]
 
     persona_convo = filtered_convo
+
     persona_convo = add_speaker_tokens(persona_convo)
     snippet_convo = add_speaker_tokens(snippet_convo)
-
     return persona_convo, snippet_convo
+
 
 
 
