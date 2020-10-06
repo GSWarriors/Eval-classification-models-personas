@@ -21,14 +21,11 @@ def main(df):
     filtered_convo = []
     persona_list = []
     snippet_list = []
-    #snippet_list = []
 
-    #first_persona = []
-    #first_snippet_convo = []
 
-    #go through full document, and append to convo list for 8 responses
-    #(1 conversation). Then append these to a list, and get the persona and snippet
-    #from it. Finally, reset convo_list to just the current line, and filtered_convo
+
+    #going through full text file, but only saving to personas at the moment.
+    #conversations can be variable length, usually 6-7 lines.
 
     for line in range(0, len(full_doc)):
 
@@ -48,62 +45,39 @@ def main(df):
                 persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
                 first_response = filter_for_responses(full_doc[line])
                 filtered_convo = [first_response[2:]]
-                """print("persona is: " + str(persona_convo))
-                print("snippet is: " + str(snippet_convo))
-                print()"""
 
                 if len(persona_list) < 2:
                     persona_list.extend([persona_convo])
                 snippet_list.extend([snippet_convo])
 
-    print("snippet list is: " + str(snippet_list))
-    print()
-    print("persona list is: " + str(persona_list))
+
+    #print("snippet list is: " + str(snippet_list))
+    #print()
+    #print("persona list is: " + str(persona_list))
+
+    #separate snippets into training and validation sets.
+    training_size = math.floor(0.8*len(snippet_list))
+    validation_size = len(snippet_list) - training_size
+    snippet_set_size = 7
+
+    init_params = DistilbertTrainingParams()
+    init_params.create_tokens_dict()
+
+    print("optimizer: " + str(init_params.optimizer))
+    print("my model parameters: " + str(init_params.convo_classifier.parameters()))
 
 
 
 
-    #tokenization_and_feature_extraction(first_persona, first_snippet_convo, snippet_list)
+    #into training function, pass in all the parameters needed
+
+    #tokenization_and_feature_extraction(persona_tokenizer, snippet_tokenizer, persona_list, snippet_list)
 
 
 
 """This function creates the DistilBertModel, tokenizes persona and snippet input,
 pads and encodes it, and extracts feature vectors"""
-def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_list):
-    #create model, tokenizer and weights for persona and snippets
-    #make this a function called tokenize_and_encode()
-    persona_model_class, persona_tokenizer_class, persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
-    snippet_model_class, snippet_tokenizer_class, snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
-
-    persona_tokenizer = persona_tokenizer_class.from_pretrained(persona_pretrained_weights)
-    persona_model = persona_model_class.from_pretrained(persona_pretrained_weights)
-
-    snippet_tokenizer = snippet_tokenizer_class.from_pretrained(snippet_pretrained_weights)
-    snippet_model = snippet_model_class.from_pretrained(snippet_pretrained_weights)
-
-    #adding tokenizer for speaker 1 and speaker 2 just for persona and snippet
-    special_tokens_dict = {'additional_special_tokens': ['<speaker-1>', '<speaker-2>']}
-    num_added_toks = persona_tokenizer.add_special_tokens(special_tokens_dict)
-    snippet_tokenizer.add_special_tokens(special_tokens_dict)
-
-    persona_model.resize_token_embeddings(len(persona_tokenizer))
-    snippet_model.resize_token_embeddings(len(snippet_tokenizer))
-
-
-    #separate snippets into training and validation sets. create optimizer with
-    #parameter tensors from Distilbert and Bilinear class
-    training_size = math.floor(0.8*len(snippet_list))
-    validation_size = len(snippet_list) - training_size
-    num_epochs = 1
-    distilbert_size = 768
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    binary_loss = torch.nn.BCELoss()
-    bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
-    convo_classifier = DistilBertandBilinear(persona_model, bi_layer).to(device)
-    optimizer = torch.optim.AdamW(convo_classifier.parameters(), lr=0.001)
-    #model_output = torch.empty(8, 1)
-    snippet_set_size = 7
+"""def tokenization_and_feature_extraction(persona_tokenizer, snippet_tokenizer, persona_list, snippet_list):
 
 
     for epoch in range(0, num_epochs):
@@ -162,7 +136,47 @@ def tokenization_and_feature_extraction(persona_convo, snippet_convo, snippet_li
             #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
             #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
             optimizer.step()
-            optimizer.zero_grad()
+            optimizer.zero_grad()"""
+
+
+
+
+class DistilbertTrainingParams:
+
+
+    #create model, tokenizer and weights for persona and snippets
+    #make this a function called tokenize_and_encode()
+    def __init__(self):
+        distilbert_size = 768
+        num_epochs = 1
+
+        self.persona_model_class, self.persona_tokenizer_class, self.persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
+        self.snippet_model_class, self.snippet_tokenizer_class, self.snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
+
+        self.persona_tokenizer = self.persona_tokenizer_class.from_pretrained(self.persona_pretrained_weights)
+        self.persona_model = self.persona_model_class.from_pretrained(self.persona_pretrained_weights)
+
+        self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained(self.snippet_pretrained_weights)
+        self.snippet_model = self.snippet_model_class.from_pretrained(self.snippet_pretrained_weights)
+
+
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.binary_loss = torch.nn.BCELoss()
+        self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
+        self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
+        self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=0.001)
+
+
+
+    def create_tokens_dict(self):
+        #adding tokenizer for speaker 1 and speaker 2 just for persona and snippet
+        special_tokens_dict = {'additional_special_tokens': ['<speaker-1>', '<speaker-2>']}
+        num_added_toks = self.persona_tokenizer.add_special_tokens(special_tokens_dict)
+        self.snippet_tokenizer.add_special_tokens(special_tokens_dict)
+        self.persona_model.resize_token_embeddings(len(self.persona_tokenizer))
+        self.snippet_model.resize_token_embeddings(len(self.snippet_tokenizer))
+
+
 
 
 
