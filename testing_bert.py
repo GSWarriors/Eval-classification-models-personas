@@ -51,12 +51,9 @@ def main(df):
                 snippet_list.extend([snippet_convo])
 
 
-    #print("snippet list is: " + str(snippet_list))
     print("first snippet is: " + str(snippet_list[0]))
     print()
     print("first persona is: " + str(persona_list[0]))
-    #print()
-    #print("persona list is: " + str(persona_list))
 
     #separate snippets into training and validation sets.
     training_size = math.floor(0.8*len(snippet_list))
@@ -65,8 +62,8 @@ def main(df):
 
     init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
-    init_params.train_model(persona_list[0], snippet_list[0], snippet_list, snippet_set_size, training_size)
-    #tokenization_and_feature_extraction(persona_tokenizer, snippet_tokenizer, persona_list, snippet_list)
+    encoded_snippets = init_params.encode_snippets(snippet_list)
+    init_params.train_model(persona_list[0], snippet_list[0], encoded_snippets, snippet_set_size, training_size)
 
 
 
@@ -106,16 +103,64 @@ class DistilbertTrainingParams:
         self.snippet_model.resize_token_embeddings(len(self.snippet_tokenizer))
 
 
+    def encode_snippets(self, snippet_list):
+        encoded_snippets = []
+
+        for i in range(0, len(snippet_list)):
+            curr_snippet = ' '.join(snippet_list[i])
+            #print("the current snippet is: " + str(curr_snippet))
+            snippet_encoding = self.snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
+            encoded_snippets.extend([snippet_encoding])
+
+        return encoded_snippets
+
+    def validate_model(self, persona_encoding, gold_snippet_encoding, encoded_snippets, snippet_set_size, training_size):
+
+        validation_size = len(encoded_snippets) - training_size
+        end_validation = training_size + validation_size
+        self.convo_classifier.persona_distilbert.eval()
+
+        for j in range(training_size, end_validation):
+            if j + snippet_set_size > end_validation:
+                snippet_set_size = end_validation - j
+
+            encoded_snippet_set = []
+            encoded_snippet_set = encoded_snippets[j: j+snippet_set_size]
+            encoded_snippet_set.extend([gold_snippet_encoding])
+
+            #the last snippet is the matching one
+            labels_list = [0]*snippet_set_size
+            gold_label = [1]
+            labels_list = labels_list + gold_label
+            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
+
+            padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
+            snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
+
+            with torch.no_grad():
+                snippet_hidden_states = self.snippet_model(snippet_input_ids)
+
+            #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
+            #afterwards, normalize the output with sigmoid function
+            snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
+            torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
+
+            model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
+            curr_loss = self.binary_loss(model_output, labels)
+            print("binary loss is now: " + str(curr_loss.item()))
+
+
+
+
+
     """This function does the actual training over the personas. Need to add including a new random persona
     every time. Will get from a persona list that I pass in as a parameter."""
-    def train_model(self, persona_convo, snippet_convo, snippet_list, snippet_set_size, training_size):
+    def train_model(self, persona_convo, snippet_convo, encoded_snippets, snippet_set_size, training_size):
 
         num_epochs = 1
 
         for epoch in range(0, num_epochs):
             persona_convo = ' '.join(persona_convo)
-            persona_num = 0
-
             persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
             gold_snippet_encoding = self.snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)
             self.convo_classifier.persona_distilbert.train()
@@ -123,29 +168,19 @@ class DistilbertTrainingParams:
 
             #distractor set creation, going through training set
             for i in range(0, training_size, snippet_set_size):
+                #last set of snippets if at end of training
                 if i + snippet_set_size > training_size:
                     snippet_set_size = training_size - i
-                    snippet_set = snippet_list[i: i+snippet_set_size]
 
-                elif i + snippet_set_size <= training_size and (persona_num < i or persona_num > i + snippet_set_size):
-                    snippet_set = snippet_list[i: i+snippet_set_size]
-                else:
-                    if i + snippet_set_size + 1 <= training_size and (persona_num >= i and persona_num <= i + snippet_set_size):
-                        snippet_set = snippet_list[i:persona_num] + snippet_list[persona_num + 1: i+snippet_set_size + 1]
-
-                #join, add encoding, and add to a list. also add the gold snippet
+                #get the encoded snippets of snippet set size, then extend the gold snippet
                 encoded_snippet_set = []
-                for j in range(0, len(snippet_set)):
-                    curr_snippet = ' '.join(snippet_set[j])
-                    snippet_encoding = self.snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
-                    encoded_snippet_set.extend([snippet_encoding])
+                encoded_snippet_set = encoded_snippets[i: i+snippet_set_size]
                 encoded_snippet_set.extend([gold_snippet_encoding])
 
                 #the last snippet is the matching one
                 labels_list = [0]*snippet_set_size
                 gold_label = [1]
                 labels_list = labels_list + gold_label
-
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
 
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
@@ -161,14 +196,22 @@ class DistilbertTrainingParams:
 
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
-                print("binary loss is now: " + str(curr_loss.item()))
-                #print("snippet number: " + str(i))
+                #print("binary loss is now: " + str(curr_loss.item()))
+                print("snippet number: " + str(i))
                 #print()
                 curr_loss.backward()
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
                 #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
                 self.optimizer.step()
                 self.optimizer.zero_grad()
+
+                if i == 21:
+                    break
+
+            #validation loop
+            print("moving to validation:")
+            self.validate_model(persona_encoding, gold_snippet_encoding, encoded_snippets, snippet_set_size, training_size)
+
 
 
 
@@ -206,7 +249,7 @@ class DistilBertandBilinear(torch.nn.Module):
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
         squeezed_output = torch.squeeze(output, 1)
         model_output = sigmoid(squeezed_output)
-        #print("normalized output between 1 and 0: " + str(model_output))
+        #print("predicted normalized output between 1 and 0: " + str(model_output))
         #print()
 
         return model_output
