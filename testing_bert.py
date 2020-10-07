@@ -70,7 +70,8 @@ def main(df):
 
 
 
-
+"""This class initializes parameters needed for using distilbert as well as the parameters
+needed for fine-tuning it for personachat"""
 class DistilbertTrainingParams:
 
 
@@ -105,8 +106,8 @@ class DistilbertTrainingParams:
         self.snippet_model.resize_token_embeddings(len(self.snippet_tokenizer))
 
 
-    """This function creates the DistilBertModel, tokenizes persona and snippet input,
-    pads and encodes it, and extracts feature vectors"""
+    """This function does the actual training over the personas. Need to add including a new random persona
+    every time. Will get from a persona list that I pass in as a parameter."""
     def train_model(self, persona_convo, snippet_convo, snippet_list, snippet_set_size, training_size):
 
         num_epochs = 1
