@@ -46,7 +46,6 @@ def main(df):
                 first_response = filter_for_responses(full_doc[line])
                 filtered_convo = [first_response[2:]]
 
-                #if len(persona_list) < 2:
                 persona_list.extend([persona_convo])
                 snippet_list.extend([snippet_convo])
 
@@ -64,7 +63,6 @@ def main(df):
     init_params.create_tokens_dict()
     encoded_snippets = init_params.encode_snippets(snippet_list)
     init_params.train_model(persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size)
-
 
 
     #second_persona_encoding, snippet_set_len, torch_snippet_features, train = init_params.predict_second_persona(persona_list, encoded_snippets, snippet_set_size)
@@ -97,6 +95,7 @@ class DistilbertTrainingParams:
         self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
         self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=0.001)
+        self.max_loss = 0
 
 
 
@@ -120,13 +119,14 @@ class DistilbertTrainingParams:
 
         return encoded_snippets
 
-    def validate_model(self, persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size, train):
+    def validate_model(self, persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size, first_iter):
 
 
         #randomly select a persona here too, (separate for validation)
         validation_size = len(encoded_snippets) - training_size
         end_validation = training_size + validation_size
         val_losses = []
+        total_loss = 0
 
         rand_persona = rand.randint(training_size, end_validation)
         print("random persona num is: " + str(rand_persona))
@@ -169,12 +169,24 @@ class DistilbertTrainingParams:
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
-                model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features, train)
+                model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
-                #print("binary loss is now: " + str(curr_loss.item()))
-                #print()
-                if i == training_size + (10*snippet_set_size):
-                    break
+                print("validation loss: " + str(curr_loss.item()))
+                print("validation snippet number: " + str(i))
+                print()
+
+                total_loss += curr_loss.item()
+
+                if not first_iter and total_loss > self.max_loss:
+                    print("we have exceeded the validation loss from last time, breaking from validation")
+                    print("the loss that exceeded: " + str(total_loss))
+                    return True
+
+
+
+        self.max_loss = max(self.max_loss, total_loss)
+        print("the max loss is saved as: " + str(self.max_loss))
+
 
 
 
@@ -238,7 +250,7 @@ class DistilbertTrainingParams:
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
-                model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features, train)
+                model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
 
 
@@ -253,14 +265,18 @@ class DistilbertTrainingParams:
 
                 if i == 140:
                     break
+
                 i += snippet_set_size
 
-            train = False
-            if first_iter:
-                #validation loop
-                print("moving to validation:")
-                self.validate_model(persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size, train)
-                first_iter = False
+
+            #validation loop
+            print("moving to validation:")
+            exceeded_loss = self.validate_model(persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size, first_iter)
+            if exceeded_loss:
+                break
+
+            first_iter = False
+
 
 
 
@@ -318,7 +334,7 @@ class DistilBertandBilinear(torch.nn.Module):
 
 
     #can modify to find hidden states without detaching to numpy? (requires more computation)
-    def forward(self, persona_encoding, snippet_set_len, torch_snippet_features, train):
+    def forward(self, persona_encoding, snippet_set_len, torch_snippet_features):
 
         sigmoid = torch.nn.Sigmoid()
         padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
@@ -335,7 +351,6 @@ class DistilBertandBilinear(torch.nn.Module):
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
         squeezed_output = torch.squeeze(output, 1)
         model_output = sigmoid(squeezed_output)
-        #if not train:
         #print("predicted normalized output between 1 and 0: " + str(model_output))
         return model_output
 
