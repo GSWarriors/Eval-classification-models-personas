@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import pandas as pd
 import transformers as ppb  #pytorch transformers
 #from transformers import BertTokenizer, BertForNextSentencePrediction
 import torch
@@ -61,6 +60,7 @@ def main(df):
 
     init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
+    print("tokens dict created")
     encoded_snippets = init_params.encode_snippets(snippet_list)
     init_params.train_model(persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size)
 
@@ -83,9 +83,14 @@ class DistilbertTrainingParams:
 
         self.persona_model_class, self.persona_tokenizer_class, self.persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
         self.snippet_model_class, self.snippet_tokenizer_class, self.snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
+        
+        print("persona and snippet model class created")
+        self.persona_tokenizer = self.persona_tokenizer_class.from_pretrained('./model/')
+        print("persona tokenizer created")
+        
+        self.persona_model = self.persona_model_class.from_pretrained('./model/')
+        print("persona model created")
 
-        self.persona_tokenizer = self.persona_tokenizer_class.from_pretrained(self.persona_pretrained_weights)
-        self.persona_model = self.persona_model_class.from_pretrained(self.persona_pretrained_weights)
 
         self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained(self.snippet_pretrained_weights)
         self.snippet_model = self.snippet_model_class.from_pretrained(self.snippet_pretrained_weights)
@@ -96,7 +101,6 @@ class DistilbertTrainingParams:
         self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=0.001)
         self.max_loss = 0
-
 
 
     def create_tokens_dict(self):
@@ -281,36 +285,25 @@ class DistilbertTrainingParams:
 
 
     """def predict_second_persona(self, persona_list, encoded_snippets, snippet_set_len):
-
-
         #function to determine whether second persona returns a one hot encoded vector of [0, 1, 0, 0, 0, 0, 0]
         print()
         print("seeing model output when feeding in second persona: ")
-
         train = False
         second_persona = persona_list[1]
         second_persona_convo = ' '.join(second_persona)
         second_persona_encoding = [self.persona_tokenizer.encode(second_persona_convo, add_special_tokens=True)]
         encoded_snippet_set = encoded_snippets[0: snippet_set_len]
-
         print("the second persona is: " + str(second_persona_convo))
-
-
         #pad the snippet set
         padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
         snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
-
         with torch.no_grad():
             snippet_hidden_states = self.snippet_model(snippet_input_ids)
-
         #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
         #afterwards, normalize the output with sigmoid function
         snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
         torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
-
         print("the snippet features for this set are: " + str(torch_snippet_features))
-
-
         return second_persona_encoding, snippet_set_len, torch_snippet_features, train"""
 
 
@@ -470,8 +463,9 @@ def filter_for_responses(response):
 
 
 my_list = []
-dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_none_original.txt",
+dataframe = pd.read_csv("train_none_original.txt",
 delimiter='\n', header= None, error_bad_lines=False)
 
 
 main(dataframe)
+
