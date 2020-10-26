@@ -84,16 +84,17 @@ class DistilbertTrainingParams:
         self.persona_model_class, self.persona_tokenizer_class, self.persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
         self.snippet_model_class, self.snippet_tokenizer_class, self.snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
         
-        print("persona and snippet model class created")
+        #print("persona and snippet model class created")
         self.persona_tokenizer = self.persona_tokenizer_class.from_pretrained('./model/')
-        print("persona tokenizer created")
+        #print("persona tokenizer created")
         
         self.persona_model = self.persona_model_class.from_pretrained('./model/')
-        print("persona model created")
+        #print("persona model created")
 
 
-        self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained(self.snippet_pretrained_weights)
-        self.snippet_model = self.snippet_model_class.from_pretrained(self.snippet_pretrained_weights)
+        self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained('./model')
+        self.snippet_model = self.snippet_model_class.from_pretrained('./model')
+        #print("snippet model and tokenizer created!")
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.binary_loss = torch.nn.BCELoss()
@@ -186,11 +187,8 @@ class DistilbertTrainingParams:
                     print("the loss that exceeded: " + str(total_loss))
                     return True
 
-
-
         self.max_loss = max(self.max_loss, total_loss)
         print("the max loss is saved as: " + str(self.max_loss))
-
 
 
 
@@ -266,9 +264,6 @@ class DistilbertTrainingParams:
                 #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-
-                if i == 140:
-                    break
 
                 i += snippet_set_size
 
