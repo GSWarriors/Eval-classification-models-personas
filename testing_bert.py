@@ -56,13 +56,12 @@ def main(df):
     #separate snippets into training and validation sets.
     training_size = math.floor(0.8*len(snippet_list))
     validation_size = len(snippet_list) - training_size
-    snippet_set_size = 7
 
     init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
     print("tokens dict created")
     encoded_snippets = init_params.encode_snippets(snippet_list)
-    init_params.train_model(persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size)
+    init_params.train_model(persona_list, snippet_list, encoded_snippets, training_size)
 
 
     #second_persona_encoding, snippet_set_len, torch_snippet_features, train = init_params.predict_second_persona(persona_list, encoded_snippets, snippet_set_size)
@@ -84,17 +83,16 @@ class DistilbertTrainingParams:
         self.persona_model_class, self.persona_tokenizer_class, self.persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
         self.snippet_model_class, self.snippet_tokenizer_class, self.snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
         
-        #print("persona and snippet model class created")
+        print("persona and snippet model class created")
         self.persona_tokenizer = self.persona_tokenizer_class.from_pretrained('./model/')
-        #print("persona tokenizer created")
+        print("persona tokenizer created")
         
         self.persona_model = self.persona_model_class.from_pretrained('./model/')
-        #print("persona model created")
+        print("persona model created")
 
 
-        self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained('./model')
-        self.snippet_model = self.snippet_model_class.from_pretrained('./model')
-        #print("snippet model and tokenizer created!")
+        self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained(self.snippet_pretrained_weights)
+        self.snippet_model = self.snippet_model_class.from_pretrained(self.snippet_pretrained_weights)
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.binary_loss = torch.nn.BCELoss()
@@ -124,14 +122,16 @@ class DistilbertTrainingParams:
 
         return encoded_snippets
 
-    def validate_model(self, persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size, first_iter):
+    def validate_model(self, persona_list, snippet_list, encoded_snippets, training_size, first_iter):
 
-
+        
         #randomly select a persona here too, (separate for validation)
         validation_size = len(encoded_snippets) - training_size
         end_validation = training_size + validation_size
         val_losses = []
         total_loss = 0
+        snippet_set_size = 7
+
 
         rand_persona = rand.randint(training_size, end_validation)
         print("random persona num is: " + str(rand_persona))
@@ -187,15 +187,18 @@ class DistilbertTrainingParams:
                     print("the loss that exceeded: " + str(total_loss))
                     return True
 
+
+
         self.max_loss = max(self.max_loss, total_loss)
         print("the max loss is saved as: " + str(self.max_loss))
 
 
 
 
+
     """This function does the actual training over the personas. Need to add including a new random persona
     every time. Will get from a persona list that I pass in as a parameter."""
-    def train_model(self, persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size):
+    def train_model(self, persona_list, snippet_list, encoded_snippets, training_size):
 
         num_epochs = 2
         train = True
@@ -203,7 +206,8 @@ class DistilbertTrainingParams:
 
 
         for epoch in range(0, num_epochs):
-
+            
+            snippet_set_size = 7
             #randomly select a persona here
             rand_persona = rand.randint(0, len(persona_list) - 1)
             print("random persona num is: " + str(rand_persona))
@@ -270,7 +274,7 @@ class DistilbertTrainingParams:
 
             #validation loop
             print("moving to validation:")
-            exceeded_loss = self.validate_model(persona_list, snippet_list, encoded_snippets, snippet_set_size, training_size, first_iter)
+            exceeded_loss = self.validate_model(persona_list, snippet_list, encoded_snippets, training_size, first_iter)
             if exceeded_loss:
                 break
 
