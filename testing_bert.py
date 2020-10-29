@@ -88,7 +88,7 @@ class DistilbertTrainingParams:
         #print("persona tokenizer created")
 
         self.persona_model = self.persona_model_class.from_pretrained('./model/')
-        #print("persona model created")
+        print("persona model created")
 
 
         self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained('./model')
@@ -206,7 +206,6 @@ class DistilbertTrainingParams:
 
 
         for epoch in range(0, num_epochs):
-
             snippet_set_size = 7
             #randomly select a persona here
             rand_persona = rand.randint(0, len(persona_list) - 1)
