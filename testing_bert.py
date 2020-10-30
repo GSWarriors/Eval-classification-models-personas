@@ -63,10 +63,10 @@ def main(df):
     encoded_snippets = init_params.encode_snippets(snippet_list)
     init_params.train_model(persona_list, snippet_list, encoded_snippets, training_size)
 
-
+    snippet_set_size = 7
     second_persona_encoding, snippet_set_len, torch_snippet_features, train = init_params.predict_second_persona(persona_list, encoded_snippets, snippet_set_size)
     my_classifier = DistilBertandBilinear(init_params.persona_model, init_params.bi_layer)
-    output = my_classifier.forward(second_persona_encoding, snippet_set_len, torch_snippet_features, train)
+    output = my_classifier.forward(second_persona_encoding, snippet_set_len, torch_snippet_features)
     print("the predicted output is: " + str(output))
 
 
@@ -122,7 +122,7 @@ class DistilbertTrainingParams:
 
         return encoded_snippets
 
-    def validate_model(self, persona_list, snippet_list, encoded_snippets, training_size, first_iter):
+    def validate_model(self, epoch, persona_list, snippet_list, encoded_snippets, training_size, first_iter):
 
 
         #randomly select a persona here too, (separate for validation)
@@ -131,12 +131,16 @@ class DistilbertTrainingParams:
         val_losses = []
         total_loss = 0
         snippet_set_size = 7
+        is_different = False
 
+        while not is_different:
+            validation_persona = rand.randint(0, 1)
+            if validation_persona != epoch:
+                is_different = True
 
-        rand_persona = rand.randint(training_size, end_validation)
-        print("random persona num is: " + str(rand_persona))
-        persona_convo = ' '.join(persona_list[rand_persona])
-        gold_snippet = snippet_list[rand_persona]
+        #print("random persona num is: " + str(rand_persona))
+        persona_convo = ' '.join(persona_list[validation_persona])
+        gold_snippet = snippet_list[validation_persona]
         persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
         gold_snippet_encoding = self.snippet_tokenizer.encode(gold_snippet, add_special_tokens=True)
 
@@ -180,13 +184,15 @@ class DistilbertTrainingParams:
                 print("validation snippet number: " + str(i))
                 print()
 
+                if i == 7648:
+                    break
+
                 total_loss += curr_loss.item()
 
                 if not first_iter and total_loss > self.max_loss:
                     print("we have exceeded the validation loss from last time, breaking from validation")
                     print("the loss that exceeded: " + str(total_loss))
                     return True
-
 
 
         self.max_loss = max(self.max_loss, total_loss)
@@ -208,11 +214,9 @@ class DistilbertTrainingParams:
         for epoch in range(0, num_epochs):
             snippet_set_size = 7
             #randomly select a persona here
-            rand_persona = rand.randint(0, len(persona_list) - 1)
-            print("random persona num is: " + str(rand_persona))
 
-            persona_convo = ' '.join(persona_list[rand_persona])
-            snippet_convo = snippet_list[rand_persona]
+            persona_convo = ' '.join(persona_list[epoch])
+            snippet_convo = snippet_list[epoch]
             persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
             gold_snippet_encoding = self.snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)
             self.convo_classifier.persona_distilbert.train()
@@ -276,7 +280,7 @@ class DistilbertTrainingParams:
 
             #validation loop
             print("moving to validation:")
-            exceeded_loss = self.validate_model(persona_list, snippet_list, encoded_snippets, training_size, first_iter)
+            exceeded_loss = self.validate_model(epoch, persona_list, snippet_list, encoded_snippets, training_size, first_iter)
             if exceeded_loss:
                 break
 
