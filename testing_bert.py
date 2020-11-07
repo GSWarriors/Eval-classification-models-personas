@@ -30,28 +30,44 @@ def main(df):
 
         filtered_line = filter_for_responses(full_doc[line])
         first_char = filtered_line[0]
+        second_char = filtered_line[1]
+
         if line == 0:
             first_response = filter_for_responses(full_doc[line])
             filtered_convo = [first_response[2:]]
         #break
-        elif first_char != '1' and line > 0:
-            response = filter_for_responses(full_doc[line])
-            filtered_convo.extend([response])
+        elif (first_char != '1' or (first_char == '1' and (ord(second_char) >= 48 and ord(second_char) <= 57))):
+            if line > 0:
+                response = filter_for_responses(full_doc[line])
+                filtered_convo.extend([response])
 
         else:
             #print convo, and persona. then, reset the filtered convo to just the current line (convo ended)
-            if first_char == '1' and line > 0:
-                persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
-                first_response = filter_for_responses(full_doc[line])
-                filtered_convo = [first_response[2:]]
+            if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
+                if line > 0:
+                    #if len(persona_list) == 159:
+                    #    print("the filtered conversation 160:" + str(filtered_convo))
 
-                persona_list.extend([persona_convo])
-                snippet_list.extend([snippet_convo])
+                    #if len(persona_list) == 160:
+                    #    print("the filtered conversation 161" + str(filtered_convo))
+
+                    persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
+                    first_response = filter_for_responses(full_doc[line])
+                    filtered_convo = [first_response[2:]]
+
+                    #if len(persona_list) == 159:
+                    #    print("persona: " + str(persona_convo))
+                    #    print("snippet: " + str(snippet_convo))
+                    #    print()
+
+                    persona_list.extend([persona_convo])
+                    snippet_list.extend([snippet_convo])
 
 
-    #print("first snippet is: " + str(snippet_list[0]))
-    #print()
-    #print("first persona is: " + str(persona_list[0]))
+
+    """print("persona list from 159 to 161: " + str(persona_list[159:162]))
+    print()
+    print("snippet list from 159 to 161: " + str(snippet_list[159:162]))"""
 
     #separate snippets into training and validation sets.
     training_size = math.floor(0.8*len(snippet_list))
@@ -63,11 +79,11 @@ def main(df):
     encoded_snippets = init_params.encode_snippets(snippet_list)
     init_params.train_model(persona_list, snippet_list, encoded_snippets, training_size)
 
-    snippet_set_size = 7
+    """snippet_set_size = 7
     second_persona_encoding, snippet_set_len, torch_snippet_features, train = init_params.predict_second_persona(persona_list, encoded_snippets, snippet_set_size)
     my_classifier = DistilBertandBilinear(init_params.persona_model, init_params.bi_layer)
     output = my_classifier.forward(second_persona_encoding, snippet_set_len, torch_snippet_features)
-    print("the predicted output is: " + str(output))
+    print("the predicted output is: " + str(output))"""
 
 
 """This class initializes parameters needed for using distilbert as well as the parameters
@@ -119,48 +135,39 @@ class DistilbertTrainingParams:
             #print("the current snippet is: " + str(curr_snippet))
             snippet_encoding = self.snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
             encoded_snippets.extend([snippet_encoding])
-
         return encoded_snippets
 
-    def validate_model(self, epoch, persona_list, snippet_list, encoded_snippets, training_size, first_iter):
 
+    def validate_model(self, persona_list, snippet_list, encoded_snippets, training_size, first_iter):
 
-        #randomly select a persona here too, (separate for validation)
-        validation_size = len(encoded_snippets) - training_size
-        end_validation = training_size + validation_size
         val_losses = []
         total_loss = 0
         snippet_set_size = 7
-        is_different = False
 
-        while not is_different:
-            validation_persona = rand.randint(0, 1)
-            if validation_persona != epoch:
-                is_different = True
-
-        #print("random persona num is: " + str(rand_persona))
-        persona_convo = ' '.join(persona_list[validation_persona])
-        gold_snippet = snippet_list[validation_persona]
-        persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-        gold_snippet_encoding = self.snippet_tokenizer.encode(gold_snippet, add_special_tokens=True)
-
-        print("validation persona: " + str(persona_convo))
-        print()
-        print("validation gold snippet: " + str(gold_snippet))
-
-
+        #go through entire persona list and randomly sample snippets. Then, calculate forward
+        #on the randomly sampled set and persona.
         with torch.no_grad():
-
             self.convo_classifier.persona_distilbert.eval()
-            for i in range(training_size, end_validation, snippet_set_size):
-                if i + snippet_set_size > end_validation:
-                    snippet_set_size = end_validation - i
+
+            for i in range(0, len(persona_list)):
+                print("validating persona : " + str(i))
+                persona_convo = ' '.join(persona_list[i])
+                gold_snippet = snippet_list[i]
+                persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
+                gold_snippet_encoding = self.snippet_tokenizer.encode(gold_snippet, add_special_tokens=True)
+
+                #print("validation persona: " + str(persona_convo))
+                #print()
+                #print("validation gold snippet: " + str(gold_snippet))
 
                 encoded_snippet_set = []
-                encoded_snippet_set = encoded_snippets[i: i+snippet_set_size]
+                random_distractors = rand.sample(snippet_list, snippet_set_size)
+                #print("random distractors list: " + str(random_distractors))
+                #encode these distractors
+                encoded_snippet_set = self.encode_snippets(random_distractors)
+                #print("the encoded snippet set: " + str(encoded_snippet_set))
                 encoded_snippet_set.extend([gold_snippet_encoding])
 
-                #the last snippet is the matching one
                 labels_list = [0]*snippet_set_size
                 gold_label = [1]
                 labels_list = labels_list + gold_label
@@ -168,7 +175,6 @@ class DistilbertTrainingParams:
 
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
                 snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
-
 
                 with torch.no_grad():
                     snippet_hidden_states = self.snippet_model(snippet_input_ids)
@@ -181,10 +187,9 @@ class DistilbertTrainingParams:
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
                 print("validation loss: " + str(curr_loss.item()))
-                print("validation snippet number: " + str(i))
                 print()
 
-                if i == 7648:
+                if i == 20:
                     break
 
                 total_loss += curr_loss.item()
@@ -280,7 +285,7 @@ class DistilbertTrainingParams:
 
             #validation loop
             print("moving to validation:")
-            exceeded_loss = self.validate_model(epoch, persona_list, snippet_list, encoded_snippets, training_size, first_iter)
+            exceeded_loss = self.validate_model(persona_list, snippet_list, encoded_snippets, training_size, first_iter)
             if exceeded_loss:
                 break
 
@@ -297,8 +302,13 @@ class DistilbertTrainingParams:
         second_persona = persona_list[1]
         second_persona_convo = ' '.join(second_persona)
         second_persona_encoding = [self.persona_tokenizer.encode(second_persona_convo, add_special_tokens=True)]
-        encoded_snippet_set = encoded_snippets[0: snippet_set_len]
+        gold_snippet_encoding = encoded_snippets[1]
         print("the second persona is: " + str(second_persona_convo))
+
+        encoded_snippet_set = []
+        encoded_snippet_set = rand.sample(encoded_snippets, snippet_set_len - 1)
+        encoded_snippet_set.extend([gold_snippet_encoding])
+
         #pad the snippet set
         padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
         snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
