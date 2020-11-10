@@ -28,46 +28,40 @@ def main(df):
 
     for line in range(0, len(full_doc)):
 
+        first_char = full_doc[line][0]
+        second_char = full_doc[line][1]
+
         filtered_line = filter_for_responses(full_doc[line])
-        first_char = filtered_line[0]
-        second_char = filtered_line[1]
 
         if line == 0:
             first_response = filter_for_responses(full_doc[line])
             filtered_convo = [first_response[2:]]
-        #break
+
+
         elif (first_char != '1' or (first_char == '1' and (ord(second_char) >= 48 and ord(second_char) <= 57))):
             if line > 0:
                 response = filter_for_responses(full_doc[line])
                 filtered_convo.extend([response])
 
-        else:
             #print convo, and persona. then, reset the filtered convo to just the current line (convo ended)
+        else:
             if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
                 if line > 0:
-                    #if len(persona_list) == 159:
-                    #    print("the filtered conversation 160:" + str(filtered_convo))
-
-                    #if len(persona_list) == 160:
-                    #    print("the filtered conversation 161" + str(filtered_convo))
-
                     persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
-                    first_response = filter_for_responses(full_doc[line])
-                    filtered_convo = [first_response[2:]]
-
-                    #if len(persona_list) == 159:
-                    #    print("persona: " + str(persona_convo))
-                    #    print("snippet: " + str(snippet_convo))
-                    #    print()
 
                     persona_list.extend([persona_convo])
                     snippet_list.extend([snippet_convo])
 
+                    #reset filtered_convo
+                    first_response = filter_for_responses(full_doc[line])
+                    filtered_convo = [first_response[2:]]
 
 
-    """print("persona list from 159 to 161: " + str(persona_list[159:162]))
-    print()
-    print("snippet list from 159 to 161: " + str(snippet_list[159:162]))"""
+
+    #print("persona list from 667 to 668: " + str(persona_list[667:669]))
+    #print()
+    #print("snippet list from 667 to 668: " + str(snippet_list[667:669]))
+
 
     #separate snippets into training and validation sets.
     training_size = math.floor(0.8*len(snippet_list))
@@ -478,11 +472,12 @@ def filter_for_responses(response):
 
 
 my_list = []
-#dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_none_original.txt",
-#delimiter='\n', header= None, error_bad_lines=False)
+
 
 dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_none_original.txt",
 delimiter='\n', header= None, error_bad_lines=False)
 
+#dataframe = pd.read_csv("train_none_original.txt",
+#delimiter='\n', header= None, error_bad_lines=False)
 
 main(dataframe)
