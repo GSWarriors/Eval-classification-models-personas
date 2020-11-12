@@ -45,8 +45,8 @@ def main(df):
             if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
                 if line > 0:
 
-                    print(str(filtered_convo))
-                    print()
+                    #print(str(filtered_convo))
+                    #print()
 
                     persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
                     persona_list.extend([persona_convo])
@@ -465,10 +465,9 @@ def filter_for_responses(response):
 
 
 
+#can edit this to valid.txt and test.txt in order to run on different files
 
-
-
-dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train.txt",
+dataframe = pd.read_csv("train.txt",
 delimiter='\n', header= None, error_bad_lines=False)
 
 #dataframe = pd.read_csv("train_none_original.txt",
