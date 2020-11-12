@@ -34,34 +34,30 @@ def main(df):
         filtered_line = filter_for_responses(full_doc[line])
 
         if line == 0:
-            first_response = filter_for_responses(full_doc[line])
-            filtered_convo = [first_response[2:]]
-
+            filtered_convo = [filtered_line[2:]]
 
         elif (first_char != '1' or (first_char == '1' and (ord(second_char) >= 48 and ord(second_char) <= 57))):
             if line > 0:
-                response = filter_for_responses(full_doc[line])
-                filtered_convo.extend([response])
+                filtered_convo.extend([filtered_line])
 
             #print convo, and persona. then, reset the filtered convo to just the current line (convo ended)
         else:
             if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
                 if line > 0:
-                    persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
 
+                    print(str(filtered_convo))
+                    print()
+
+                    persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
                     persona_list.extend([persona_convo])
                     snippet_list.extend([snippet_convo])
 
                     #reset filtered_convo
-                    first_response = filter_for_responses(full_doc[line])
-                    filtered_convo = [first_response[2:]]
+                    filtered_convo = [filtered_line[2:]]
 
-
-
-    #print("persona list from 667 to 668: " + str(persona_list[667:669]))
+    #print(str(snippet_list))
     #print()
-    #print("snippet list from 667 to 668: " + str(snippet_list[667:669]))
-
+    #print(str(persona_list))
 
     #separate snippets into training and validation sets.
     training_size = math.floor(0.8*len(snippet_list))
@@ -183,8 +179,8 @@ class DistilbertTrainingParams:
                 print("validation loss: " + str(curr_loss.item()))
                 print()
 
-                if i == 20:
-                    break
+                #if i == 20:
+                #    break
 
                 total_loss += curr_loss.item()
 
@@ -271,8 +267,8 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 140:
-                    break
+                #if i == 140:
+                #    break
 
                 i += snippet_set_size
 
@@ -471,10 +467,8 @@ def filter_for_responses(response):
 
 
 
-my_list = []
 
-
-dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_none_original.txt",
+dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train.txt",
 delimiter='\n', header= None, error_bad_lines=False)
 
 #dataframe = pd.read_csv("train_none_original.txt",

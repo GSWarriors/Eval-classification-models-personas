@@ -30,8 +30,8 @@ def main(df):
 
     for line in range(0, len(full_doc)):
 
-        print("the current line is: " + str(full_doc[line]))
-        print()
+        #print("the current line is: " + str(full_doc[line]))
+        #print()
 
         first_char = full_doc[line][0]
         second_char = full_doc[line][1]
@@ -39,13 +39,15 @@ def main(df):
         if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
             train_count += 1
 
-            if train_count == 11:
+            if train_count == 12:
                 break
 
         f.write(full_doc[line] + "\n")
 
 
     f.close()
+
+
 
 
 
