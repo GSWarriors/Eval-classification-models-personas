@@ -467,7 +467,7 @@ def filter_for_responses(response):
 
 #can edit this to valid.txt and test.txt in order to run on different files
 
-dataframe = pd.read_csv("train.txt",
+dataframe = pd.read_csv("data/train.txt",
 delimiter='\n', header= None, error_bad_lines=False)
 
 #dataframe = pd.read_csv("train_none_original.txt",
