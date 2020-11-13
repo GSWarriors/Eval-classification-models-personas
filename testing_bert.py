@@ -10,57 +10,23 @@ import itertools
 
 
 
-def main(df):
-
-    k = 2
-    persona_convo = []
-    snippet_convo = []
-    full_doc = df[0]
-
-    filtered_convo = []
-    persona_list = []
-    snippet_list = []
+def main(train_df, valid_df):
 
 
+    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    #going through full text file, but only saving to personas at the moment.
-    #conversations can be variable length, usually 6-7 lines.
-
-    for line in range(0, len(full_doc)):
-
-        first_char = full_doc[line][0]
-        second_char = full_doc[line][1]
-
-        filtered_line = filter_for_responses(full_doc[line])
-
-        if line == 0:
-            filtered_convo = [filtered_line[2:]]
-
-        elif (first_char != '1' or (first_char == '1' and (ord(second_char) >= 48 and ord(second_char) <= 57))):
-            if line > 0:
-                filtered_convo.extend([filtered_line])
-
-            #print convo, and persona. then, reset the filtered convo to just the current line (convo ended)
-        else:
-            if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
-                if line > 0:
-
-                    #print(str(filtered_convo))
-                    #print()
-
-                    persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
-                    persona_list.extend([persona_convo])
-                    snippet_list.extend([snippet_convo])
-
-                    #reset filtered_convo
-                    filtered_convo = [filtered_line[2:]]
-
-    #print(str(snippet_list))
+    print(len(training_personas))
+    print()
+    print(len(training_snippets))
+    #print("training personas: " + str(training_personas))
     #print()
-    #print(str(persona_list))
+    #print("validation personas: " + str(training_snippets))
+
+
 
     #separate snippets into training and validation sets.
-    training_size = math.floor(0.8*len(snippet_list))
+    """training_size = math.floor(0.8*len(snippet_list))
     validation_size = len(snippet_list) - training_size
 
     init_params = DistilbertTrainingParams()
@@ -69,11 +35,57 @@ def main(df):
     encoded_snippets = init_params.encode_snippets(snippet_list)
     init_params.train_model(persona_list, snippet_list, encoded_snippets, training_size)
 
-    """snippet_set_size = 7
+    snippet_set_size = 7
     second_persona_encoding, snippet_set_len, torch_snippet_features, train = init_params.predict_second_persona(persona_list, encoded_snippets, snippet_set_size)
     my_classifier = DistilBertandBilinear(init_params.persona_model, init_params.bi_layer)
     output = my_classifier.forward(second_persona_encoding, snippet_set_len, torch_snippet_features)
     print("the predicted output is: " + str(output))"""
+
+
+
+
+def create_persona_and_snippet_lists(df):
+
+        k = 2
+        persona_convo = []
+        snippet_convo = []
+        full_doc = df[0]
+
+        filtered_convo = []
+        persona_list = []
+        snippet_list = []
+
+        #going through full text file, but only saving to personas at the moment.
+        #conversations can be variable length, usually 6-7 lines.
+
+        for line in range(0, len(full_doc)):
+
+            first_char = full_doc[line][0]
+            second_char = full_doc[line][1]
+
+            filtered_line = filter_for_responses(full_doc[line])
+
+            if line == 0:
+                filtered_convo = [filtered_line[2:]]
+
+            elif (first_char != '1' or (first_char == '1' and (ord(second_char) >= 48 and ord(second_char) <= 57))):
+                if line > 0:
+                    filtered_convo.extend([filtered_line])
+
+            else:
+                if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
+                    if line > 0:
+                        #filter for persona and snippet from this conversation (has ended)
+                        persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
+                        persona_list.extend([persona_convo])
+                        snippet_list.extend([snippet_convo])
+
+                        #reset filtered_convo
+                        filtered_convo = [filtered_line[2:]]
+
+        return persona_list, snippet_list
+
+
 
 
 """This class initializes parameters needed for using distilbert as well as the parameters
@@ -128,35 +140,32 @@ class DistilbertTrainingParams:
         return encoded_snippets
 
 
-    def validate_model(self, persona_list, snippet_list, encoded_snippets, training_size, first_iter):
 
-        val_losses = []
+
+    """doing validation using snippet random sampling (size 7) with gold snippets at end of snippet set"""
+    def validate_model(self, persona_list,encoded_snippets, first_iter):
+
+        #val_losses = []
         total_loss = 0
         snippet_set_size = 7
 
         #go through entire persona list and randomly sample snippets. Then, calculate forward
         #on the randomly sampled set and persona.
+
         with torch.no_grad():
             self.convo_classifier.persona_distilbert.eval()
 
             for i in range(0, len(persona_list)):
-                print("validating persona : " + str(i))
-                persona_convo = ' '.join(persona_list[i])
-                gold_snippet = snippet_list[i]
-                persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-                gold_snippet_encoding = self.snippet_tokenizer.encode(gold_snippet, add_special_tokens=True)
 
-                #print("validation persona: " + str(persona_convo))
-                #print()
-                #print("validation gold snippet: " + str(gold_snippet))
+
+                persona_convo = ' '.join(persona_list[i])
+                persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
+                gold_snippet_encoding = encoded_snippets[i]
 
                 encoded_snippet_set = []
-                random_distractors = rand.sample(snippet_list, snippet_set_size)
-                #print("random distractors list: " + str(random_distractors))
-                #encode these distractors
-                encoded_snippet_set = self.encode_snippets(random_distractors)
-                #print("the encoded snippet set: " + str(encoded_snippet_set))
+                encoded_snippet_set = rand.sample(encoded_snippets, snippet_set_size)
                 encoded_snippet_set.extend([gold_snippet_encoding])
+                #print("the encoded snippet set: " + str(encoded_snippet_set))
 
                 labels_list = [0]*snippet_set_size
                 gold_label = [1]
@@ -179,8 +188,8 @@ class DistilbertTrainingParams:
                 print("validation loss: " + str(curr_loss.item()))
                 print()
 
-                #if i == 20:
-                #    break
+                if i == 20:
+                    break
 
                 total_loss += curr_loss.item()
 
@@ -267,15 +276,16 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                #if i == 140:
-                #    break
+                if i == 140:
+                    break
 
                 i += snippet_set_size
 
 
             #validation loop
             print("moving to validation:")
-            exceeded_loss = self.validate_model(persona_list, snippet_list, encoded_snippets, training_size, first_iter)
+
+            exceeded_loss = self.validate_model(persona_list, encoded_snippets, first_iter)
             if exceeded_loss:
                 break
 
@@ -296,7 +306,7 @@ class DistilbertTrainingParams:
         print("the second persona is: " + str(second_persona_convo))
 
         encoded_snippet_set = []
-        encoded_snippet_set = rand.sample(encoded_snippets, snippet_set_len - 1)
+        encoded_snippet_set = rand.sample(encoded_snippets, snippet_set_len)
         encoded_snippet_set.extend([gold_snippet_encoding])
 
         #pad the snippet set
@@ -310,6 +320,7 @@ class DistilbertTrainingParams:
         torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
         print("the snippet features for this set are: " + str(torch_snippet_features))
         return second_persona_encoding, snippet_set_len, torch_snippet_features, train
+
 
 
 
@@ -467,10 +478,9 @@ def filter_for_responses(response):
 
 #can edit this to valid.txt and test.txt in order to run on different files
 
-dataframe = pd.read_csv("data/train.txt",
-delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("train_none_original.txt",delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("data/valid.txt", delimiter='\n', header= None, error_bad_lines=False)
 
-#dataframe = pd.read_csv("train_none_original.txt",
-#delimiter='\n', header= None, error_bad_lines=False)
 
-main(dataframe)
+
+main(train_dataframe, validation_dataframe)

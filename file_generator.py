@@ -9,6 +9,9 @@ import math
 import itertools
 
 
+"""This script should be able to parse the first 10 conversations from any "non-original.txt" type
+of file from personachat dataset"""
+
 
 def main(df):
 
@@ -26,7 +29,7 @@ def main(df):
     #going through full text file, but only saving to personas at the moment.
     #conversations can be variable length, usually 6-7 lines.
     train_count = 0
-    f = open("train.txt", "w")
+    f = open("test.txt", "w")
 
     for line in range(0, len(full_doc)):
 
@@ -53,7 +56,7 @@ def main(df):
 
 
 
-dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/train_none_original.txt",
+dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/test_none_original.txt",
 delimiter='\n', header= None, error_bad_lines=False)
 
 main(dataframe)
