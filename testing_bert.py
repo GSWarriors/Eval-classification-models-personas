@@ -16,12 +16,12 @@ def main(train_df, valid_df):
     training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    print(len(training_personas))
-    print()
-    print(len(training_snippets))
-    #print("training personas: " + str(training_personas))
+    #print(len(training_personas))
     #print()
-    #print("validation personas: " + str(training_snippets))
+    #print(len(training_snippets))
+    print("training personas: " + str(training_personas))
+    print()
+    print("validation personas: " + str(validation_personas))
 
 
 
@@ -484,3 +484,7 @@ validation_dataframe = pd.read_csv("data/valid.txt", delimiter='\n', header= Non
 
 
 main(train_dataframe, validation_dataframe)
+
+
+"""1. Report the number of unique questions (Q_ID) in this dataset
+ 2. Find the number of samples (all the examples: including same question based examples)"""
