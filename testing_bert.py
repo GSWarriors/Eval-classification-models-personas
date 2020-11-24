@@ -1,3 +1,7 @@
+
+
+from torch.utils.tensorboard import SummaryWriter
+
 import pandas as pd
 import numpy as np
 import transformers as ppb  #pytorch transformers
@@ -16,10 +20,6 @@ def main(train_df, valid_df):
 
     training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
-
-    #print("training personas: " + str(training_personas))
-    #print()
-    #print("validation personas: " + str(validation_personas))
 
     init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
@@ -137,7 +137,7 @@ class DistilbertTrainingParams:
 
 
     """doing validation using snippet random sampling (size 7) with gold snippets at end of snippet set"""
-    def validate_model(self, validation_personas, encoded_val_snippets, first_iter):
+    def validate_model(self, validation_personas, encoded_val_snippets, epoch, first_iter, writer):
 
         total_loss = 0
         snippet_set_size = 7
@@ -150,7 +150,7 @@ class DistilbertTrainingParams:
 
             for i in range(0, len(validation_personas)):
 
-                print("validation persona: " + str(validation_personas[i]))
+                #print("validation persona: " + str(validation_personas[i]))
 
                 persona_convo = ' '.join(validation_personas[i])
                 persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
@@ -179,19 +179,28 @@ class DistilbertTrainingParams:
 
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
-                print("validation loss: " + str(curr_loss.item()))
-                print()
+                #print("validation loss: " + str(curr_loss.item()))
+                #print()
 
-                if i == 20:
-                    break
 
                 total_loss += curr_loss.item()
+                writer.add_scalar("loss/validation", total_loss, i)
+
+
 
                 if not first_iter and total_loss > self.max_loss:
                     print("we have exceeded the validation loss from last time, breaking from validation")
                     print("the loss that exceeded: " + str(total_loss))
+                    #writer.add_scalar("loss/validation", total_loss, epoch)
                     return True
 
+                #show loss after going through 20 validation personas
+                if i == 20:
+                    break
+
+            #writer.add_scalar("loss/validation", total_loss, epoch)
+            print("total loss after epoch " + str(epoch) + ": " + str(total_loss))
+            print()
 
         self.max_loss = max(self.max_loss, total_loss)
         print("the max loss is saved as: " + str(self.max_loss))
@@ -204,29 +213,30 @@ class DistilbertTrainingParams:
     every time. Will get from a persona list that I pass in as a parameter."""
     def train_model(self, training_personas, validation_personas, encoded_train_snippets, encoded_val_snippets):
 
-        num_epochs = 2
+
+        writer = SummaryWriter('runs/bert_classifier')
+        num_epochs = 5
         train = True
         first_iter = True
         training_size = len(training_personas)
 
 
         for epoch in range(0, num_epochs):
+            training_loss = 0
+
+            if epoch > 0:
+                first_iter = False
+
             snippet_set_size = 7
             #randomly select a persona here
             persona_convo = ' '.join(training_personas[epoch])
-            #snippet_convo = training_snippets[epoch]
             persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
             gold_snippet_encoding = encoded_train_snippets[epoch]
-            #gold_snippet_encoding = self.snippet_tokenizer.encode(snippet_convo, add_special_tokens=True)
             self.convo_classifier.persona_distilbert.train()
             self.snippet_model.eval()
 
             print("training persona is: " + str(persona_convo))
             print()
-            #print("training snippet is: " + str(snippet_convo))
-            #print()
-            #print()
-
 
             #distractor set creation, going through training set
             i = 0
@@ -245,25 +255,24 @@ class DistilbertTrainingParams:
                 gold_label = [1]
                 labels_list = labels_list + gold_label
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
-
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
                 snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
 
-                with torch.no_grad():
-                    snippet_hidden_states = self.snippet_model(snippet_input_ids)
 
                 #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
                 #afterwards, normalize the output with sigmoid function
+                with torch.no_grad():
+                    snippet_hidden_states = self.snippet_model(snippet_input_ids)
+
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
-
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
 
+                writer.add_scalar("loss/train", curr_loss.item(), i)
 
-                #print("binary loss is now: " + str(curr_loss.item()))
+
                 print("training snippet number: " + str(i))
-                #print()
                 curr_loss.backward()
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
                 #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
@@ -274,16 +283,20 @@ class DistilbertTrainingParams:
                     break
 
                 i += snippet_set_size
+                training_loss += curr_loss.item()
 
-
+            #writer.add_scalar("loss/train", training_loss, epoch)
             #validation loop
             print("moving to validation:")
 
-            exceeded_loss = self.validate_model(validation_personas, encoded_val_snippets, first_iter)
+            exceeded_loss = self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
             if exceeded_loss:
                 break
 
-            first_iter = False
+
+
+        writer.flush()
+        writer.close()
 
 
 
@@ -301,6 +314,7 @@ class DistilbertTrainingParams:
 
         encoded_snippet_set = []
         encoded_snippet_set = rand.sample(encoded_train_snippets, snippet_set_len - 1)
+        #encoded_snippet_set = encoded_train_snippets[0: snippet_set_len - 1]
         encoded_snippet_set.extend([gold_snippet_encoding])
 
         #pad the snippet set
@@ -473,7 +487,7 @@ def filter_for_responses(response):
 #can edit this to valid.txt and test.txt in order to run on different files
 
 train_dataframe = pd.read_csv("train_none_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("data/valid.txt", delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("valid_none_original.txt", delimiter='\n', header= None, error_bad_lines=False)
 
 
 
