@@ -157,7 +157,7 @@ class DistilbertTrainingParams:
                 gold_snippet_encoding = encoded_val_snippets[i]
 
                 encoded_snippet_set = []
-                encoded_snippet_set = rand.sample(encoded_val_snippets, snippet_set_size)
+                encoded_snippet_set = encoded_val_snippets[i: i + snippet_set_size]
                 encoded_snippet_set.extend([gold_snippet_encoding])
                 #print("the encoded snippet set: " + str(encoded_snippet_set))
 
@@ -195,7 +195,7 @@ class DistilbertTrainingParams:
                     return True
 
                 #show loss after going through 20 validation personas
-                if i == 20:
+                if i == 50:
                     break
 
             #writer.add_scalar("loss/validation", total_loss, epoch)
@@ -247,7 +247,8 @@ class DistilbertTrainingParams:
 
                 #get the encoded snippets of snippet set size, then extend the gold snippet
                 encoded_snippet_set = []
-                encoded_snippet_set = rand.sample(encoded_train_snippets, snippet_set_size)
+                #encoded_snippet_set = rand.sample(encoded_train_snippets, snippet_set_size)
+                encoded_snippet_set = encoded_train_snippets[i: i + snippet_set_size]
                 encoded_snippet_set.extend([gold_snippet_encoding])
 
                 #the last snippet is the matching one
@@ -269,7 +270,7 @@ class DistilbertTrainingParams:
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
 
-                writer.add_scalar("loss/train", curr_loss.item(), i)
+                #writer.add_scalar("loss/train", curr_loss.item(), i)
 
 
                 print("training snippet number: " + str(i))
@@ -279,19 +280,20 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 140:
+                if i > 300:
                     break
 
                 i += snippet_set_size
                 training_loss += curr_loss.item()
 
-            #writer.add_scalar("loss/train", training_loss, epoch)
+            print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
+            writer.add_scalar("loss/train", training_loss, epoch)
             #validation loop
-            print("moving to validation:")
+            #print("moving to validation:")
 
-            exceeded_loss = self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
-            if exceeded_loss:
-                break
+            #exceeded_loss = self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
+            #if exceeded_loss:
+            #    break
 
 
 
@@ -384,10 +386,8 @@ def add_padding_and_mask(input_ids_list):
     padded_arr = np.array([i + [0]*(max_input_len-len(i)) for i in input_ids_list])
     #padded_tensor_arr = torch.tensor([i + [0]*(max_input_len-len(i)) for i in input_ids_list])
     #masking- create another variable to mask the padding we've created for persona and snippets
-    #print("padded arr is: " + str(padded_arr))
 
     attention_mask = np.where(padded_arr != 0, 1, 0)
-    #print("attention mask is: " + str(attention_mask))
 
     return padded_arr, attention_mask
 
