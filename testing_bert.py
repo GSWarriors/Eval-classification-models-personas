@@ -1,12 +1,11 @@
 
-
+import torch
 from torch.utils.tensorboard import SummaryWriter
 
 import pandas as pd
 import numpy as np
 import transformers as ppb  #pytorch transformers
 #from transformers import BertTokenizer, BertForNextSentencePrediction
-import torch
 import random as rand
 import time
 import math
@@ -27,7 +26,9 @@ def main(train_df, valid_df):
     encoded_train_snippets = init_params.encode_snippets(training_snippets)
     encoded_val_snippets = init_params.encode_snippets(validation_snippets)
 
-    init_params.train_model(training_personas, validation_personas, encoded_train_snippets, encoded_val_snippets)
+    init_params.train_model(training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets)
+
+
 
     """snippet_set_size = 7
     second_persona_encoding, snippet_set_len, torch_snippet_features, train = init_params.predict_second_persona(training_personas, encoded_train_snippets, snippet_set_size)
@@ -110,7 +111,7 @@ class DistilbertTrainingParams:
         self.binary_loss = torch.nn.BCELoss()
         self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
         self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
-        self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=0.001)
+        self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
         self.max_loss = 0
 
 
@@ -139,8 +140,9 @@ class DistilbertTrainingParams:
     """doing validation using snippet random sampling (size 7) with gold snippets at end of snippet set"""
     def validate_model(self, validation_personas, encoded_val_snippets, epoch, first_iter, writer):
 
-        total_loss = 0
+        validation_loss = 0
         snippet_set_size = 7
+        validation_size = len(validation_personas)
 
         #go through entire persona list and randomly sample snippets. Then, calculate forward
         #on the randomly sampled set and persona.
@@ -148,9 +150,11 @@ class DistilbertTrainingParams:
         with torch.no_grad():
             self.convo_classifier.persona_distilbert.eval()
 
-            for i in range(0, len(validation_personas)):
-
-                #print("validation persona: " + str(validation_personas[i]))
+            i = 0
+            while i < validation_size:
+                #last set of snippets if at end of training
+                if i + snippet_set_size > validation_size:
+                    snippet_set_size = validation_size - i
 
                 persona_convo = ' '.join(validation_personas[i])
                 persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
@@ -179,31 +183,27 @@ class DistilbertTrainingParams:
 
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
-                #print("validation loss: " + str(curr_loss.item()))
-                #print()
 
-
-                total_loss += curr_loss.item()
-                writer.add_scalar("loss/validation", total_loss, i)
-
-
-
-                if not first_iter and total_loss > self.max_loss:
-                    print("we have exceeded the validation loss from last time, breaking from validation")
-                    print("the loss that exceeded: " + str(total_loss))
-                    #writer.add_scalar("loss/validation", total_loss, epoch)
-                    return True
+                print("validating snippet number: " + str(i))
 
                 #show loss after going through 20 validation personas
-                if i == 50:
+                if i == 70:
                     break
 
-            #writer.add_scalar("loss/validation", total_loss, epoch)
-            print("total loss after epoch " + str(epoch) + ": " + str(total_loss))
-            print()
+                i += snippet_set_size
+                validation_loss += curr_loss.item()
 
-        self.max_loss = max(self.max_loss, total_loss)
-        print("the max loss is saved as: " + str(self.max_loss))
+                """if not first_iter and total_loss > self.max_loss:
+                    print("we have exceeded the validation loss from last time, breaking from validation")
+                    print("the loss that exceeded: " + str(total_loss))
+                    writer.add_scalar("loss/validation", total_loss, epoch)
+                    return True"""
+
+
+        print("the loss for this epoch is: " + str(validation_loss))
+        writer.add_scalar("loss/validation", validation_loss, epoch)
+        #self.max_loss = max(self.max_loss, validation_loss)
+        #print("the max loss is saved as: " + str(self.max_loss))
 
 
 
@@ -211,17 +211,19 @@ class DistilbertTrainingParams:
 
     """This function does the actual training over the personas. Need to add including a new random persona
     every time. Will get from a persona list that I pass in as a parameter."""
-    def train_model(self, training_personas, validation_personas, encoded_train_snippets, encoded_val_snippets):
-
+    def train_model(self, training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets):
+        #for name, param in self.convo_classifier.named_parameters():
+        #    if param.requires_grad and name == 'bilinear_layer.weight':
+        #        print(str(name) + ", " + str(param.data))
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 5
+        num_epochs = 1
         train = True
         first_iter = True
         training_size = len(training_personas)
 
-
         for epoch in range(0, num_epochs):
+
             training_loss = 0
 
             if epoch > 0:
@@ -235,15 +237,20 @@ class DistilbertTrainingParams:
             self.convo_classifier.persona_distilbert.train()
             self.snippet_model.eval()
 
-            print("training persona is: " + str(persona_convo))
-            print()
-
             #distractor set creation, going through training set
+            #need to add another loop here to go through all personas
+            print("training persona is: " + str(training_personas[epoch]))
+
             i = 0
             while i < training_size:
                 #last set of snippets if at end of training
                 if i + snippet_set_size > training_size:
                     snippet_set_size = training_size - i
+
+                print("training snippet set starting with snippet: " + str(i))
+                full_set = training_snippets[i: i + snippet_set_size]
+                print("the gold snippet here: " + str(training_snippets[epoch]))
+
 
                 #get the encoded snippets of snippet set size, then extend the gold snippet
                 encoded_snippet_set = []
@@ -267,38 +274,38 @@ class DistilbertTrainingParams:
 
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
+
+                print(str("snippet set features:" + str(snippet_set_features)))
+                print()
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
-
-                #writer.add_scalar("loss/train", curr_loss.item(), i)
-
-
-                print("training snippet number: " + str(i))
                 curr_loss.backward()
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
                 #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i > 300:
+                if i == 140:
                     break
 
                 i += snippet_set_size
                 training_loss += curr_loss.item()
 
-            print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
-            writer.add_scalar("loss/train", training_loss, epoch)
+            #print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
+            #writer.add_scalar("loss/train", training_loss, epoch)
             #validation loop
             #print("moving to validation:")
 
-            #exceeded_loss = self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
+            #self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
             #if exceeded_loss:
             #    break
-
-
-
         writer.flush()
         writer.close()
+
+        #save the model
+        #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')
+
+
 
 
 

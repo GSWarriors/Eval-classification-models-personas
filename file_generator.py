@@ -14,8 +14,31 @@ of file from personachat dataset"""
 
 
 def main(df):
+    #print("shape is: " + str(df.shape))
 
-    k = 2
+    first_convo = df[0][:11]
+    saved_persona = []
+    new_saved_persona = []
+    #go through and only print lines with "your persona"
+
+    for i in range(0, len(first_convo)):
+        if "partner's persona: " in first_convo[i]:
+            saved_persona.extend([first_convo[i][2:]])
+
+    #further filtering
+    for i in range(0, len(saved_persona)):
+        new_persona = saved_persona[i].replace("partner's persona: ", "")
+        new_saved_persona.extend([new_persona])
+
+    print("persona list: " + str(new_saved_persona))
+    new_str_persona = ' '.join(new_saved_persona)
+    print("string version: " + str(new_str_persona))
+
+
+
+
+
+    """k = 2
     persona_convo = []
     snippet_convo = []
     full_doc = df[0]
@@ -24,7 +47,7 @@ def main(df):
     persona_list = []
     snippet_list = []
 
-
+    print("10 lines: " + str(df[0][10]))
 
     #going through full text file, but only saving to personas at the moment.
     #conversations can be variable length, usually 6-7 lines.
@@ -48,15 +71,15 @@ def main(df):
         f.write(full_doc[line] + "\n")
 
 
-    f.close()
+    f.close()"""
 
 
 
 
 
+#use train_self_original.txt for training file
 
-
-dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/test_none_original.txt",
+dataframe = pd.read_csv("train_other_original.txt",
 delimiter='\n', header= None, error_bad_lines=False)
 
 main(dataframe)
