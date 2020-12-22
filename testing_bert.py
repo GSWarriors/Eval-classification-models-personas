@@ -17,16 +17,16 @@ def main(train_df, valid_df):
 
     #separate snippets into training and validation sets.
 
-    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
-    validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
+    create_persona_and_snippet_lists(train_df)
+    #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    init_params = DistilbertTrainingParams()
+    """init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
 
     encoded_train_snippets = init_params.encode_snippets(training_snippets)
     encoded_val_snippets = init_params.encode_snippets(validation_snippets)
 
-    init_params.train_model(training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets)
+    init_params.train_model(training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets)"""
 
 
 
@@ -42,43 +42,49 @@ def main(train_df, valid_df):
 def create_persona_and_snippet_lists(df):
 
         k = 2
-        persona_convo = []
-        snippet_convo = []
         full_doc = df[0]
-
-        filtered_convo = []
         persona_list = []
-        snippet_list = []
+        saved_persona = []
+        checking_persona = True
 
-        #going through full text file, but only saving to personas at the moment.
-        #conversations can be variable length, usually 6-7 lines.
+        #go through and only print lines with "your persona"
 
         for line in range(0, len(full_doc)):
-
-            first_char = full_doc[line][0]
-            second_char = full_doc[line][1]
-
-            filtered_line = filter_for_responses(full_doc[line])
-
-            if line == 0:
-                filtered_convo = [filtered_line[2:]]
-
-            elif (first_char != '1' or (first_char == '1' and (ord(second_char) >= 48 and ord(second_char) <= 57))):
-                if line > 0:
-                    filtered_convo.extend([filtered_line])
+            if "partner's persona: " in full_doc[line]:
+                checking_persona = True 
+                saved_persona.extend([full_doc[line][2:]])
+                print(str(full_doc[line]))
 
             else:
-                if first_char == '1' and not (ord(second_char) >= 48 and ord(second_char) <= 57):
-                    if line > 0:
-                        #filter for persona and snippet from this conversation (has ended)
-                        persona_convo, snippet_convo = filter_persona_and_snippet(filtered_convo, k)
-                        persona_list.extend([persona_convo])
-                        snippet_list.extend([snippet_convo])
+                #add the created persona to persona list
+                #reset saved persona
+                if checking_persona:
+                    persona_list.append(saved_persona)
+                    saved_persona = []
+                    checking_persona = False
 
-                        #reset filtered_convo
-                        filtered_convo = [filtered_line[2:]]
+                if not checking_persona:
+                    filtered_line = filter_for_responses(full_doc[line])
+                    print("the non-persona line: "  + str(filtered_line))
+                    print()
 
-        return persona_list, snippet_list
+
+            if line == 100:
+                print("persona list: " + str(persona_list))
+                break
+
+
+
+        """#further filtering
+        for i in range(0, len(saved_persona)):
+            new_persona = saved_persona[i].replace("partner's persona: ", "")
+            new_saved_persona.extend([new_persona])
+
+        print("persona list: " + str(new_saved_persona))
+        new_str_persona = ' '.join(new_saved_persona)
+        print("string version: " + str(new_str_persona))"""
+
+
 
 
 
@@ -493,8 +499,8 @@ def filter_for_responses(response):
 
 #can edit this to valid.txt and test.txt in order to run on different files
 
-train_dataframe = pd.read_csv("train_none_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("valid_none_original.txt", delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
 
 
 
