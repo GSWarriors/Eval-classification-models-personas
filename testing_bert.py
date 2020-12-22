@@ -51,9 +51,9 @@ def create_persona_and_snippet_lists(df):
 
         for line in range(0, len(full_doc)):
             if "partner's persona: " in full_doc[line]:
-                checking_persona = True 
+                checking_persona = True
                 saved_persona.extend([full_doc[line][2:]])
-                print(str(full_doc[line]))
+                #print(str(full_doc[line]))
 
             else:
                 #add the created persona to persona list
@@ -65,8 +65,8 @@ def create_persona_and_snippet_lists(df):
 
                 if not checking_persona:
                     filtered_line = filter_for_responses(full_doc[line])
-                    print("the non-persona line: "  + str(filtered_line))
-                    print()
+                    #print("the non-persona line: "  + str(filtered_line))
+                    #print()
 
 
             if line == 100:
