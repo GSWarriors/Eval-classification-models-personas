@@ -45,33 +45,56 @@ def create_persona_and_snippet_lists(df):
         full_doc = df[0]
         persona_list = []
         saved_persona = []
+
+        saved_snippets = []
+        snippet_list = []
         checking_persona = True
 
         #go through and only print lines with "your persona"
-
         for line in range(0, len(full_doc)):
+
+            #we add saved_snippets list to snippet_list if our list of saved_snippets is not empty
             if "partner's persona: " in full_doc[line]:
+                #snippet_list.append(saved_snippets)
+                #print("the snippets list: " + str(snippet_list))
+
                 checking_persona = True
                 saved_persona.extend([full_doc[line][2:]])
-                #print(str(full_doc[line]))
 
             else:
                 #add the created persona to persona list
-                #reset saved persona
+                #reset saved persona and the saved snippets
                 if checking_persona:
                     persona_list.append(saved_persona)
+
+                    saved_snippets = add_speaker_tokens(saved_snippets)
+                    print("saved snippets: " + str(saved_snippets))
+                    print()
+
                     saved_persona = []
+                    saved_snippets = []
                     checking_persona = False
 
+                #if we're moving into the non-persona lines, then we add to saved_snippets list
                 if not checking_persona:
                     filtered_line = filter_for_responses(full_doc[line])
+                    saved_snippets.append(filtered_line)
                     #print("the non-persona line: "  + str(filtered_line))
                     #print()
 
 
             if line == 100:
-                print("persona list: " + str(persona_list))
+                #print("persona list: " + str(persona_list))
                 break
+
+        for i in range(0, len(persona_list)):
+            #print("the current persona is: " + str(curr_personas))
+            #print()
+            for j in range(0, len(persona_list[i])):
+                persona_list[i][j] = persona_list[i][j].replace("partner's persona: ", "")
+
+        #print("persona list after: " + str(persona_list))
+
 
 
 
@@ -477,12 +500,16 @@ def add_speaker_tokens(convo):
 #filters 1 back and forth between two speakers and returns the string
 def filter_for_responses(response):
     #print("number is: " + str(response[0]))
-    number = response[0]
+    first_char = response[0]
+    second_char = response[1]
     tab_count = 0
     two_speaker_utterances = ""
 
-    if number != '1':
+    #we need to remove the line number depending on whether its 1 or 2 digits
+    if not (ord(second_char) >= 48 and ord(second_char) <= 57):
         response = response[2:]
+    else:
+        response = response[3:]
 
     for char in response:
         if tab_count < 2:
