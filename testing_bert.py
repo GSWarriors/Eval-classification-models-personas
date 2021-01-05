@@ -27,8 +27,10 @@ def main(train_df, valid_df):
 
 
 
-    """encoded_train_snippets = init_params.encode_snippets(training_snippet)
-    encoded_val_snippets = init_params.encode_snippets(validation_snippets)
+    encoded_train_snippets = init_params.encode_snippets(training_snippet)
+    print()
+    print(str(encoded_train_snippets))
+    """encoded_val_snippets = init_params.encode_snippets(validation_snippets)
 
     init_params.train_model(training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets)"""
 
@@ -104,7 +106,7 @@ def create_persona_and_snippet_lists(df):
 
 
 
-#partition all the snippets into a size of k or less to create gold snippets 
+#partition all the snippets into a size of k or less to create gold snippets
 def partition_snippets(first_snippet_list, k):
 
     for i in range(0, len(first_snippet_list), k):
