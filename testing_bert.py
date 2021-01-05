@@ -17,13 +17,17 @@ def main(train_df, valid_df):
 
     #separate snippets into training and validation sets.
 
-    create_persona_and_snippet_lists(train_df)
-    #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
+    training_snippet = create_persona_and_snippet_lists(train_df)
+    training_snippet = list(training_snippet)
 
-    """init_params = DistilbertTrainingParams()
+    print("training snippet list: " + str(training_snippet))
+    #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
+    init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
 
-    encoded_train_snippets = init_params.encode_snippets(training_snippets)
+
+
+    """encoded_train_snippets = init_params.encode_snippets(training_snippet)
     encoded_val_snippets = init_params.encode_snippets(validation_snippets)
 
     init_params.train_model(training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets)"""
@@ -55,9 +59,6 @@ def create_persona_and_snippet_lists(df):
 
             #we add saved_snippets list to snippet_list if our list of saved_snippets is not empty
             if "partner's persona: " in full_doc[line]:
-                #snippet_list.append(saved_snippets)
-                #print("the snippets list: " + str(snippet_list))
-
                 checking_persona = True
                 saved_persona.extend([full_doc[line][2:]])
 
@@ -66,10 +67,10 @@ def create_persona_and_snippet_lists(df):
                 #reset saved persona and the saved snippets
                 if checking_persona:
                     persona_list.append(saved_persona)
-
                     saved_snippets = add_speaker_tokens(saved_snippets)
-                    print("saved snippets: " + str(saved_snippets))
-                    print()
+
+                    if saved_snippets:
+                        snippet_list.append(saved_snippets)
 
                     saved_persona = []
                     saved_snippets = []
@@ -79,34 +80,35 @@ def create_persona_and_snippet_lists(df):
                 if not checking_persona:
                     filtered_line = filter_for_responses(full_doc[line])
                     saved_snippets.append(filtered_line)
-                    #print("the non-persona line: "  + str(filtered_line))
-                    #print()
 
 
             if line == 100:
-                #print("persona list: " + str(persona_list))
                 break
 
         for i in range(0, len(persona_list)):
-            #print("the current persona is: " + str(curr_personas))
-            #print()
             for j in range(0, len(persona_list[i])):
                 persona_list[i][j] = persona_list[i][j].replace("partner's persona: ", "")
 
+        first_persona = persona_list[0]
+        first_snippet_list = snippet_list[0]
+
+        #print(str(first_persona))
+        #print(str(first_snippet_list))
         #print("persona list after: " + str(persona_list))
+        first_generator = partition_snippets(first_snippet_list, 2)
+
+        return first_generator
 
 
 
 
-        """#further filtering
-        for i in range(0, len(saved_persona)):
-            new_persona = saved_persona[i].replace("partner's persona: ", "")
-            new_saved_persona.extend([new_persona])
 
-        print("persona list: " + str(new_saved_persona))
-        new_str_persona = ' '.join(new_saved_persona)
-        print("string version: " + str(new_str_persona))"""
 
+#partition all the snippets into a size of k or less to create gold snippets 
+def partition_snippets(first_snippet_list, k):
+
+    for i in range(0, len(first_snippet_list), k):
+        yield first_snippet_list[i: i + k]
 
 
 
