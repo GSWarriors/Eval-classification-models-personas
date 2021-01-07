@@ -16,33 +16,16 @@ import itertools
 def main(train_df, valid_df):
 
     #separate snippets into training and validation sets.
+    create_persona_and_snippet_lists(train_df)
+    #print(str(training_personas))
+    #print(str(training_snippets))
 
-    training_snippet = create_persona_and_snippet_lists(train_df)
-    training_snippet = list(training_snippet)
-
-    print("training snippet list: " + str(training_snippet))
     #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
-    init_params = DistilbertTrainingParams()
-    init_params.create_tokens_dict()
-
-
-
-    encoded_train_snippets = init_params.encode_snippets(training_snippet)
-    print()
-    print(str(encoded_train_snippets))
-    """encoded_val_snippets = init_params.encode_snippets(validation_snippets)
-
-    init_params.train_model(training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets)"""
-
-
-
-    """snippet_set_size = 7
-    second_persona_encoding, snippet_set_len, torch_snippet_features, train = init_params.predict_second_persona(training_personas, encoded_train_snippets, snippet_set_size)
-    my_classifier = DistilBertandBilinear(init_params.persona_model, init_params.bi_layer)
-    output = my_classifier.forward(second_persona_encoding, snippet_set_len, torch_snippet_features)
-    print("the predicted output is: " + str(output))"""
-
-
+    #init_params = DistilbertTrainingParams()
+    #init_params.create_tokens_dict()
+    #encoded_train_snippets = encode_snippets(init_params, training_snippets)
+    #encoded_val_snippets = init_params.encode_snippets(validation_snippets)
+    #init_params.train_model(init_params, training_personas, training_snippets)
 
 
 def create_persona_and_snippet_lists(df):
@@ -69,6 +52,7 @@ def create_persona_and_snippet_lists(df):
                 #reset saved persona and the saved snippets
                 if checking_persona:
                     persona_list.append(saved_persona)
+
                     saved_snippets = add_speaker_tokens(saved_snippets)
 
                     if saved_snippets:
@@ -78,32 +62,55 @@ def create_persona_and_snippet_lists(df):
                     saved_snippets = []
                     checking_persona = False
 
+
                 #if we're moving into the non-persona lines, then we add to saved_snippets list
                 if not checking_persona:
                     filtered_line = filter_for_responses(full_doc[line])
                     saved_snippets.append(filtered_line)
 
 
-            if line == 100:
-                break
-
         for i in range(0, len(persona_list)):
             for j in range(0, len(persona_list[i])):
                 persona_list[i][j] = persona_list[i][j].replace("partner's persona: ", "")
 
-        first_persona = persona_list[0]
-        first_snippet_list = snippet_list[0]
 
-        #print(str(first_persona))
-        #print(str(first_snippet_list))
-        #print("persona list after: " + str(persona_list))
-        first_generator = partition_snippets(first_snippet_list, 2)
+        #should add this portion somewhere in the loop later
 
-        return first_generator
+        saved_snippets = add_speaker_tokens(saved_snippets)
+        snippet_list.append(saved_snippets)
+
+        for i in range(0, 10):
+            print("persona is: " + str(persona_list[i]))
+            print("snippet is: " + str(snippet_list[i]))
+            print()
+
+        print(len(persona_list))
+        print(len(snippet_list))
 
 
 
 
+        #first_persona = persona_list[0]
+        #first_snippet_list = snippet_list[0]
+
+        #return [first_persona], [first_snippet_list]
+
+
+
+
+
+
+
+
+def encode_snippets(init_params, snippet_list):
+    encoded_snippets = []
+
+    for i in range(0, len(snippet_list)):
+        curr_snippet = ' '.join(snippet_list[i])
+        #print("the current snippet is: " + str(curr_snippet))
+        snippet_encoding = init_params.snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
+        encoded_snippets.extend([snippet_encoding])
+    return encoded_snippets
 
 
 #partition all the snippets into a size of k or less to create gold snippets
@@ -157,15 +164,6 @@ class DistilbertTrainingParams:
         self.snippet_model.resize_token_embeddings(len(self.snippet_tokenizer))
 
 
-    def encode_snippets(self, snippet_list):
-        encoded_snippets = []
-
-        for i in range(0, len(snippet_list)):
-            curr_snippet = ' '.join(snippet_list[i])
-            #print("the current snippet is: " + str(curr_snippet))
-            snippet_encoding = self.snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
-            encoded_snippets.extend([snippet_encoding])
-        return encoded_snippets
 
 
 
@@ -244,25 +242,33 @@ class DistilbertTrainingParams:
 
     """This function does the actual training over the personas. Need to add including a new random persona
     every time. Will get from a persona list that I pass in as a parameter."""
-    def train_model(self, training_personas, validation_personas, training_snippets, validation_snippets, encoded_train_snippets, encoded_val_snippets):
-        #for name, param in self.convo_classifier.named_parameters():
-        #    if param.requires_grad and name == 'bilinear_layer.weight':
-        #        print(str(name) + ", " + str(param.data))
+    def train_model(self, init_params, training_personas, training_snippets):
 
-        writer = SummaryWriter('runs/bert_classifier')
+        #writer = SummaryWriter('runs/bert_classifier')
         num_epochs = 1
         train = True
         first_iter = True
-        training_size = len(training_personas)
+        #training_size = len(training_personas)
 
         for epoch in range(0, num_epochs):
-
-            training_loss = 0
 
             if epoch > 0:
                 first_iter = False
 
-            snippet_set_size = 7
+            for i in range(0, len(training_personas)):
+                for j in range(0, len(training_snippets)):
+                    partitioned_train_snippet = partition_snippets(training_snippets[i], 2)
+                    partitioned_train_snippet = list(partitioned_train_snippet)
+                    encoded_train_snippets = encode_snippets(init_params, partitioned_train_snippet)
+
+                    print("the partitioned snippet: " + str(partitioned_train_snippet))
+                    print()
+                    print("the encoded partitioned snippet: " + str(encoded_train_snippets))
+
+
+
+
+            """snippet_set_size = 7
             #randomly select a persona here
             persona_convo = ' '.join(training_personas[epoch])
             persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
@@ -336,42 +342,7 @@ class DistilbertTrainingParams:
         writer.close()
 
         #save the model
-        #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')
-
-
-
-
-
-
-    def predict_second_persona(self, training_personas, encoded_train_snippets, snippet_set_len):
-        #function to determine whether second persona returns a one hot encoded vector of [0, 1, 0, 0, 0, 0, 0]
-        print()
-        print("seeing model output when feeding in second persona: ")
-        train = False
-        second_persona = training_personas[1]
-        second_persona_convo = ' '.join(second_persona)
-        second_persona_encoding = [self.persona_tokenizer.encode(second_persona_convo, add_special_tokens=True)]
-        gold_snippet_encoding = encoded_train_snippets[1]
-        print("the second persona is: " + str(second_persona_convo))
-
-        encoded_snippet_set = []
-        encoded_snippet_set = rand.sample(encoded_train_snippets, snippet_set_len - 1)
-        #encoded_snippet_set = encoded_train_snippets[0: snippet_set_len - 1]
-        encoded_snippet_set.extend([gold_snippet_encoding])
-
-        #pad the snippet set
-        padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
-        snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
-        with torch.no_grad():
-            snippet_hidden_states = self.snippet_model(snippet_input_ids)
-        #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
-        #afterwards, normalize the output with sigmoid function
-        snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
-        torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
-        print("the snippet features for this set are: " + str(torch_snippet_features))
-        return second_persona_encoding, snippet_set_len, torch_snippet_features, train
-
-
+        #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')"""
 
 
 
@@ -477,12 +448,10 @@ def add_speaker_tokens(convo):
             if convo[line][char] == '\t':
                 if speaker_num == 1:
                     speaker_num = 2
-                    speaker_str = ' <speaker-2> '
-
+                    #speaker_str = ' <speaker-2> '
                     #add speaker 2 tag from after tab where speaker 1 left off
-                    curr_response = convo[line][last_speaker_index + 1: len(convo[line]) - 1]
-                    new_response_str += speaker_str + curr_response
-                    #print("new response str is : " + new_response_str)
+                    #curr_response = convo[line][last_speaker_index + 1: len(convo[line]) - 1]
+                    #new_response_str += speaker_str + curr_response
 
                 else:
                     speaker_num = 1
@@ -538,5 +507,35 @@ validation_dataframe = pd.read_csv("valid_other_original.txt", delimiter='\n', h
 main(train_dataframe, validation_dataframe)
 
 
-"""1. Report the number of unique questions (Q_ID) in this dataset
-2. Find the number of samples (all the examples: including same question based examples)"""
+
+
+
+
+"""goes inside distilbert training params function
+def predict_second_persona(self, training_personas, encoded_train_snippets, snippet_set_len):
+    #function to determine whether second persona returns a one hot encoded vector of [0, 1, 0, 0, 0, 0, 0]
+    print()
+    print("seeing model output when feeding in second persona: ")
+    train = False
+    second_persona = training_personas[1]
+    second_persona_convo = ' '.join(second_persona)
+    second_persona_encoding = [self.persona_tokenizer.encode(second_persona_convo, add_special_tokens=True)]
+    gold_snippet_encoding = encoded_train_snippets[1]
+    print("the second persona is: " + str(second_persona_convo))
+
+    encoded_snippet_set = []
+    encoded_snippet_set = rand.sample(encoded_train_snippets, snippet_set_len - 1)
+    #encoded_snippet_set = encoded_train_snippets[0: snippet_set_len - 1]
+    encoded_snippet_set.extend([gold_snippet_encoding])
+
+    #pad the snippet set
+    padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
+    snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
+    with torch.no_grad():
+        snippet_hidden_states = self.snippet_model(snippet_input_ids)
+    #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
+    #afterwards, normalize the output with sigmoid function
+    snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
+    torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
+    print("the snippet features for this set are: " + str(torch_snippet_features))
+    return second_persona_encoding, snippet_set_len, torch_snippet_features, train"""
