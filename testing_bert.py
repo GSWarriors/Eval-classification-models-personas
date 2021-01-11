@@ -16,16 +16,17 @@ import itertools
 def main(train_df, valid_df):
 
     #separate snippets into training and validation sets.
-    create_persona_and_snippet_lists(train_df)
-    #print(str(training_personas))
-    #print(str(training_snippets))
-
+    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
-    #init_params = DistilbertTrainingParams()
-    #init_params.create_tokens_dict()
+    #print(str(training_snippets))
+    init_params = DistilbertTrainingParams()
+    init_params.create_tokens_dict()
+    init_params.train_model(init_params, training_personas, training_snippets)
+
+
+    #encoding is moved
     #encoded_train_snippets = encode_snippets(init_params, training_snippets)
     #encoded_val_snippets = init_params.encode_snippets(validation_snippets)
-    #init_params.train_model(init_params, training_personas, training_snippets)
 
 
 def create_persona_and_snippet_lists(df):
@@ -78,24 +79,7 @@ def create_persona_and_snippet_lists(df):
 
         saved_snippets = add_speaker_tokens(saved_snippets)
         snippet_list.append(saved_snippets)
-
-        for i in range(0, 10):
-            print("persona is: " + str(persona_list[i]))
-            print("snippet is: " + str(snippet_list[i]))
-            print()
-
-        print(len(persona_list))
-        print(len(snippet_list))
-
-
-
-
-        #first_persona = persona_list[0]
-        #first_snippet_list = snippet_list[0]
-
-        #return [first_persona], [first_snippet_list]
-
-
+        return persona_list, snippet_list
 
 
 
@@ -232,7 +216,7 @@ class DistilbertTrainingParams:
 
 
         print("the loss for this epoch is: " + str(validation_loss))
-        writer.add_scalar("loss/validation", validation_loss, epoch)
+        #writer.add_scalar("loss/validation", validation_loss, epoch)
         #self.max_loss = max(self.max_loss, validation_loss)
         #print("the max loss is saved as: " + str(self.max_loss))
 
@@ -244,26 +228,54 @@ class DistilbertTrainingParams:
     every time. Will get from a persona list that I pass in as a parameter."""
     def train_model(self, init_params, training_personas, training_snippets):
 
-        #writer = SummaryWriter('runs/bert_classifier')
         num_epochs = 1
         train = True
         first_iter = True
-        #training_size = len(training_personas)
+        encoded_dict = {}
+        snippet_set_size = 4
+        training_size = len(training_snippets)
+
+
+        #the dictionary of encoded snippets (by conversation number)
+        for i in range(0, len(training_snippets)):
+            partitioned_gold_snippet = partition_snippets(training_snippets[i], 2)
+            partitioned_gold_snippet = list(partitioned_gold_snippet)
+            encoded_gold_snippets = encode_snippets(init_params, partitioned_gold_snippet)
+            encoded_dict[i] = encoded_gold_snippets
+        print("encoded dict: " + str(encoded_dict[8000]))
+
 
         for epoch in range(0, num_epochs):
-
             if epoch > 0:
                 first_iter = False
 
-            for i in range(0, len(training_personas)):
-                for j in range(0, len(training_snippets)):
-                    partitioned_train_snippet = partition_snippets(training_snippets[i], 2)
-                    partitioned_train_snippet = list(partitioned_train_snippet)
-                    encoded_train_snippets = encode_snippets(init_params, partitioned_train_snippet)
+            first_training_persona = training_personas[0]
+            first_snippet_list = [training_snippets[0]]
 
-                    print("the partitioned snippet: " + str(partitioned_train_snippet))
-                    print()
-                    print("the encoded partitioned snippet: " + str(encoded_train_snippets))
+            print("first training persona: " + str(first_training_persona))
+            print()
+            print("first snippet: " + str(first_snippet_list))
+            print()
+
+            for i in range(0, len(training_personas)):
+                if i > 0:
+                    break
+                for j in range(0, len(training_snippets)):
+
+                    if j + 1 + snippet_set_size > training_size:
+                        snippet_set_size = training_size - j
+
+                    encoded_snippet_set = []
+                    if j + 1 + snippet_set_size <= training_size:
+                        encoded_snippet_set = {key:value for key, value in encoded_dict.items() if key >= j + 1 and key < j + 1 + snippet_set_size}
+                        print("encoded snippet set:"  + str(encoded_snippet_set))
+                        print()
+                        #gold_snippet_encoding = encoded_dict[j]
+                        #encoded_snippet_set.extend([gold_snippet_encoding])
+
+                    if j == 20:
+                        break
+
 
 
 
