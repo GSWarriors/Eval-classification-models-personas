@@ -242,7 +242,7 @@ class DistilbertTrainingParams:
             partitioned_gold_snippet = list(partitioned_gold_snippet)
             encoded_gold_snippets = encode_snippets(init_params, partitioned_gold_snippet)
             encoded_dict[i] = encoded_gold_snippets
-        print("encoded dict: " + str(encoded_dict[8000]))
+        #print("encoded dict: " + str(encoded_dict[8000]))
 
 
         for epoch in range(0, num_epochs):
@@ -254,24 +254,39 @@ class DistilbertTrainingParams:
 
             print("first training persona: " + str(first_training_persona))
             print()
-            print("first snippet: " + str(first_snippet_list))
+            print("gold snippets: " + str(first_snippet_list))
             print()
+
+
 
             for i in range(0, len(training_personas)):
                 if i > 0:
                     break
-                for j in range(0, len(training_snippets)):
 
+                for j in range(0, len(training_snippets)):
                     if j + 1 + snippet_set_size > training_size:
                         snippet_set_size = training_size - j
 
+                    print("distractor set: " + str(training_snippets[j + 1: j + 1 + snippet_set_size]))
+                    print()
+                    #creates encoded snippet set
                     encoded_snippet_set = []
                     if j + 1 + snippet_set_size <= training_size:
-                        encoded_snippet_set = {key:value for key, value in encoded_dict.items() if key >= j + 1 and key < j + 1 + snippet_set_size}
-                        print("encoded snippet set:"  + str(encoded_snippet_set))
-                        print()
+                        for key, value in encoded_dict.items():
+                            if key >= j + 1 and key < j + 1 + snippet_set_size:
+                                #print(str(value[0]))
+                                #print("the key added: " + str(key))
+                                encoded_snippet_set.extend([value])
+
+                        #print("encoded snippet set for snippets " + str(encoded_snippet_set))
+                        #print()
                         #gold_snippet_encoding = encoded_dict[j]
                         #encoded_snippet_set.extend([gold_snippet_encoding])
+
+                    flatten_encoded_snippet_set = [elem for twod in encoded_snippet_set for elem in twod]
+                    #print("after flattening: " + str(flatten_encoded_snippet_set))
+
+
 
                     if j == 20:
                         break
