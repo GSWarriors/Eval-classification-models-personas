@@ -10,6 +10,7 @@ import random as rand
 import time
 import math
 import itertools
+import json
 
 
 
@@ -18,15 +19,59 @@ def main(train_df, valid_df):
     #separate snippets into training and validation sets.
     training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
-    #print(str(training_snippets))
+    create_persona_and_snippet_dict(training_personas, training_snippets)
+
+    with open("positive-training-samples.json", "r") as f:
+        data = json.load(f)
+        first_persona = data[0]['text persona']
+        first_snippet = data[0]['text snippet']
+        first_id = data[0]['ID']
+        print(first_persona)
+        print(first_snippet)
+        print(first_id)
+
+
+
     init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
-    init_params.train_model(init_params, training_personas, training_snippets)
+    #init_params.train_model(init_params, training_personas, training_snippets)
 
 
     #encoding is moved
     #encoded_train_snippets = encode_snippets(init_params, training_snippets)
     #encoded_val_snippets = init_params.encode_snippets(validation_snippets)
+
+
+def create_persona_and_snippet_dict(training_personas, training_snippets):
+
+    persona_dict = {}
+    snippet_dict = {}
+
+
+    for i in range(0, len(training_personas)):
+        persona_dict[i] = training_personas[i]
+        snippet_dict[i] = training_snippets[i]
+
+    #create new json file
+    pos_list = []
+
+    with open("positive-training-samples.json", "w+") as pos_file:
+        for i in range(0, len(training_personas)):
+            data = {
+                "ID": i,
+                "text persona": persona_dict[i],
+                "text snippet": snippet_dict[i],
+                "class": 1
+            }
+
+            pos_list.append(data)
+
+        json.dump(pos_list, pos_file, indent=4)
+
+
+
+
+
 
 
 def create_persona_and_snippet_lists(df):
