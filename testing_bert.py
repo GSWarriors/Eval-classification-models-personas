@@ -19,17 +19,8 @@ def main(train_df, valid_df):
     #separate snippets into training and validation sets.
     training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
-    create_persona_and_snippet_dict(training_personas, training_snippets)
-
-    with open("positive-training-samples.json", "r") as f:
-        data = json.load(f)
-        first_persona = data[0]['text persona']
-        first_snippet = data[0]['text snippet']
-        first_id = data[0]['ID']
-        print(first_persona)
-        print(first_snippet)
-        print(first_id)
-
+    persona_dict, snippet_dict = create_persona_and_snippet_dict(training_personas, training_snippets)
+    create_negative_samples(training_personas, training_snippets, persona_dict, snippet_dict)
 
 
     init_params = DistilbertTrainingParams()
@@ -37,16 +28,67 @@ def main(train_df, valid_df):
     #init_params.train_model(init_params, training_personas, training_snippets)
 
 
-    #encoding is moved
-    #encoded_train_snippets = encode_snippets(init_params, training_snippets)
-    #encoded_val_snippets = init_params.encode_snippets(validation_snippets)
+    """
+    an example of how to access the positive samples from the json file created
+    with open("positive-training-samples.json", "r") as f:
+        data = json.load(f)
+        first_persona = data[0]['text persona']
+        first_snippet = data[0]['text snippet']
+        first_id = data[0]['ID']
+        print(first_persona)
+        print(first_snippet)
+        print(first_id)"""
+
+
+
+def create_negative_samples(training_personas, training_snippets, persona_dict, snippet_dict):
+
+    #this function creates negative samples, and checks whether or not the negative samples id are
+    #equal to i. However, doesn't check whether an id has already been assigned (can use same one twice).
+    #can change this later
+
+
+    neg_list = []
+    NUM_SAMPLES = 10
+    neg_persona_dict = {}
+    neg_snippet_dict = {}
+
+
+    with open("negative-training-samples.json", "w+") as neg_file:
+        for i in range(0, len(persona_dict)):
+            sample_assigned = False
+            sampled_ids = rand.sample(range(0, len(snippet_dict)), NUM_SAMPLES)
+            print("the sampled ids are: " + str(sampled_ids))
+
+
+            for j in range(0, len(sampled_ids)):
+                if i != sampled_ids[j]:
+                    data = {
+                        "ID": i,
+                        "text persona": persona_dict[i],
+                        "text snippet": snippet_dict[sampled_ids[j]],
+                        "class": 0
+                    }
+
+                    neg_list.append(data)
+                    break
+
+            #if i == 10:
+            #    break
+
+        json.dump(neg_list, neg_file, indent=4)
+        neg_file.close()
+
+
+
+
+
 
 
 def create_persona_and_snippet_dict(training_personas, training_snippets):
 
     persona_dict = {}
     snippet_dict = {}
-
 
     for i in range(0, len(training_personas)):
         persona_dict[i] = training_personas[i]
@@ -67,9 +109,10 @@ def create_persona_and_snippet_dict(training_personas, training_snippets):
             pos_list.append(data)
 
         json.dump(pos_list, pos_file, indent=4)
+    pos_file.close()
 
 
-
+    return persona_dict, snippet_dict
 
 
 
@@ -577,37 +620,3 @@ validation_dataframe = pd.read_csv("valid_other_original.txt", delimiter='\n', h
 
 
 main(train_dataframe, validation_dataframe)
-
-
-
-
-
-
-"""goes inside distilbert training params function
-def predict_second_persona(self, training_personas, encoded_train_snippets, snippet_set_len):
-    #function to determine whether second persona returns a one hot encoded vector of [0, 1, 0, 0, 0, 0, 0]
-    print()
-    print("seeing model output when feeding in second persona: ")
-    train = False
-    second_persona = training_personas[1]
-    second_persona_convo = ' '.join(second_persona)
-    second_persona_encoding = [self.persona_tokenizer.encode(second_persona_convo, add_special_tokens=True)]
-    gold_snippet_encoding = encoded_train_snippets[1]
-    print("the second persona is: " + str(second_persona_convo))
-
-    encoded_snippet_set = []
-    encoded_snippet_set = rand.sample(encoded_train_snippets, snippet_set_len - 1)
-    #encoded_snippet_set = encoded_train_snippets[0: snippet_set_len - 1]
-    encoded_snippet_set.extend([gold_snippet_encoding])
-
-    #pad the snippet set
-    padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
-    snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
-    with torch.no_grad():
-        snippet_hidden_states = self.snippet_model(snippet_input_ids)
-    #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
-    #afterwards, normalize the output with sigmoid function
-    snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
-    torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
-    print("the snippet features for this set are: " + str(torch_snippet_features))
-    return second_persona_encoding, snippet_set_len, torch_snippet_features, train"""
