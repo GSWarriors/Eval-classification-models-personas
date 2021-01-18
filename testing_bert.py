@@ -20,24 +20,14 @@ def main(train_df, valid_df):
     training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
     persona_dict, snippet_dict = create_persona_and_snippet_dict(training_personas, training_snippets)
+    #can uncomment below when needing to create neg samples again
     create_negative_samples(training_personas, training_snippets, persona_dict, snippet_dict)
-
 
     init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
-    #init_params.train_model(init_params, training_personas, training_snippets)
+    encoded_train_snippets = init_params.encode_snippets(training_snippets)
+    init_params.train_model(training_personas, training_snippets, encoded_train_snippets)
 
-
-    """
-    an example of how to access the positive samples from the json file created
-    with open("positive-training-samples.json", "r") as f:
-        data = json.load(f)
-        first_persona = data[0]['text persona']
-        first_snippet = data[0]['text snippet']
-        first_id = data[0]['ID']
-        print(first_persona)
-        print(first_snippet)
-        print(first_id)"""
 
 
 
@@ -46,8 +36,6 @@ def create_negative_samples(training_personas, training_snippets, persona_dict, 
     #this function creates negative samples, and checks whether or not the negative samples id are
     #equal to i. However, doesn't check whether an id has already been assigned (can use same one twice).
     #can change this later
-
-
     neg_list = []
     NUM_SAMPLES = 10
     neg_persona_dict = {}
@@ -58,7 +46,7 @@ def create_negative_samples(training_personas, training_snippets, persona_dict, 
         for i in range(0, len(persona_dict)):
             sample_assigned = False
             sampled_ids = rand.sample(range(0, len(snippet_dict)), NUM_SAMPLES)
-            print("the sampled ids are: " + str(sampled_ids))
+            #print("the sampled ids are: " + str(sampled_ids))
 
 
             for j in range(0, len(sampled_ids)):
@@ -67,14 +55,13 @@ def create_negative_samples(training_personas, training_snippets, persona_dict, 
                         "ID": i,
                         "text persona": persona_dict[i],
                         "text snippet": snippet_dict[sampled_ids[j]],
-                        "class": 0
+                        "class": 0,
+                        "snippet ID": sampled_ids[j]
                     }
 
                     neg_list.append(data)
                     break
 
-            #if i == 10:
-            #    break
 
         json.dump(neg_list, neg_file, indent=4)
         neg_file.close()
@@ -171,20 +158,6 @@ def create_persona_and_snippet_lists(df):
 
 
 
-
-
-
-def encode_snippets(init_params, snippet_list):
-    encoded_snippets = []
-
-    for i in range(0, len(snippet_list)):
-        curr_snippet = ' '.join(snippet_list[i])
-        #print("the current snippet is: " + str(curr_snippet))
-        snippet_encoding = init_params.snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
-        encoded_snippets.extend([snippet_encoding])
-    return encoded_snippets
-
-
 #partition all the snippets into a size of k or less to create gold snippets
 def partition_snippets(first_snippet_list, k):
 
@@ -193,12 +166,9 @@ def partition_snippets(first_snippet_list, k):
 
 
 
-
-
 """This class initializes parameters needed for using distilbert as well as the parameters
 needed for fine-tuning it for personachat"""
 class DistilbertTrainingParams:
-
 
     #create model, tokenizer and weights for persona and snippets
     #make this a function called tokenize_and_encode()
@@ -207,10 +177,7 @@ class DistilbertTrainingParams:
 
         self.persona_model_class, self.persona_tokenizer_class, self.persona_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
         self.snippet_model_class, self.snippet_tokenizer_class, self.snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
-
-        #print("persona and snippet model class created")
         self.persona_tokenizer = self.persona_tokenizer_class.from_pretrained('./model/')
-        #print("persona tokenizer created")
 
         self.persona_model = self.persona_model_class.from_pretrained('./model/')
         print("persona model created")
@@ -234,6 +201,18 @@ class DistilbertTrainingParams:
         self.snippet_tokenizer.add_special_tokens(special_tokens_dict)
         self.persona_model.resize_token_embeddings(len(self.persona_tokenizer))
         self.snippet_model.resize_token_embeddings(len(self.snippet_tokenizer))
+
+
+
+    def encode_snippets(self, snippet_list):
+        encoded_snippets = []
+
+        for i in range(0, len(snippet_list)):
+            curr_snippet = ' '.join(snippet_list[i])
+            #print("the current snippet is: " + str(curr_snippet))
+            snippet_encoding = self.snippet_tokenizer.encode(curr_snippet, add_special_tokens=True)
+            encoded_snippets.extend([snippet_encoding])
+        return encoded_snippets
 
 
 
@@ -314,150 +293,106 @@ class DistilbertTrainingParams:
 
     """This function does the actual training over the personas. Need to add including a new random persona
     every time. Will get from a persona list that I pass in as a parameter."""
-    def train_model(self, init_params, training_personas, training_snippets):
+    def train_model(self, training_personas, training_snippets, encoded_train_snippets):
 
         num_epochs = 1
         train = True
         first_iter = True
         encoded_dict = {}
-        snippet_set_size = 4
+        SNIPPET_SET_SIZE = 1
         training_size = len(training_snippets)
 
-
-        #the dictionary of encoded snippets (by conversation number)
-        for i in range(0, len(training_snippets)):
-            partitioned_gold_snippet = partition_snippets(training_snippets[i], 2)
-            partitioned_gold_snippet = list(partitioned_gold_snippet)
-            encoded_gold_snippets = encode_snippets(init_params, partitioned_gold_snippet)
-            encoded_dict[i] = encoded_gold_snippets
-        #print("encoded dict: " + str(encoded_dict[8000]))
+        pos_file = open("positive-training-samples.json", "r")
+        neg_file = open("negative-training-samples.json", "r")
+        pos_data = json.load(pos_file)
+        neg_data = json.load(neg_file)
 
 
         for epoch in range(0, num_epochs):
             if epoch > 0:
                 first_iter = False
 
-            first_training_persona = training_personas[0]
-            first_snippet_list = [training_snippets[0]]
-
-            print("first training persona: " + str(first_training_persona))
-            print()
-            print("gold snippets: " + str(first_snippet_list))
-            print()
-
-
-
-            for i in range(0, len(training_personas)):
-                if i > 0:
-                    break
-
-                for j in range(0, len(training_snippets)):
-                    if j + 1 + snippet_set_size > training_size:
-                        snippet_set_size = training_size - j
-
-                    print("distractor set: " + str(training_snippets[j + 1: j + 1 + snippet_set_size]))
-                    print()
-                    #creates encoded snippet set
-                    encoded_snippet_set = []
-                    if j + 1 + snippet_set_size <= training_size:
-                        for key, value in encoded_dict.items():
-                            if key >= j + 1 and key < j + 1 + snippet_set_size:
-                                #print(str(value[0]))
-                                #print("the key added: " + str(key))
-                                encoded_snippet_set.extend([value])
-
-                        #print("encoded snippet set for snippets " + str(encoded_snippet_set))
-                        #print()
-                        #gold_snippet_encoding = encoded_dict[j]
-                        #encoded_snippet_set.extend([gold_snippet_encoding])
-
-                    flatten_encoded_snippet_set = [elem for twod in encoded_snippet_set for elem in twod]
-                    #print("after flattening: " + str(flatten_encoded_snippet_set))
-
-
-
-                    if j == 20:
-                        break
-
-
-
-
-
-            """snippet_set_size = 7
-            #randomly select a persona here
-            persona_convo = ' '.join(training_personas[epoch])
-            persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-            gold_snippet_encoding = encoded_train_snippets[epoch]
             self.convo_classifier.persona_distilbert.train()
             self.snippet_model.eval()
+            training_loss = 0
 
-            #distractor set creation, going through training set
-            #need to add another loop here to go through all personas
-            print("training persona is: " + str(training_personas[epoch]))
+            for i in range(0, len(training_personas)):
 
-            i = 0
-            while i < training_size:
-                #last set of snippets if at end of training
-                if i + snippet_set_size > training_size:
-                    snippet_set_size = training_size - i
+                #encoded snippet set takes from negative training samples snippet id and then accesses the
+                #encoded list
 
-                print("training snippet set starting with snippet: " + str(i))
-                full_set = training_snippets[i: i + snippet_set_size]
-                print("the gold snippet here: " + str(training_snippets[epoch]))
+                persona_convo = ' '.join(pos_data[i]['text persona'])
+                snippet_convo = pos_data[i]['text snippet']
+                neg_snippet_id = neg_data[i]['snippet ID']
+                neg_snippet_convo = neg_data[i]['text snippet']
+
+                print("persona convo: " + str(persona_convo))
+                print()
+                print("snippet convo: " + str(snippet_convo))
+                print()
+                print("negative snippet convo: " + str(neg_snippet_convo))
 
 
-                #get the encoded snippets of snippet set size, then extend the gold snippet
-                encoded_snippet_set = []
-                #encoded_snippet_set = rand.sample(encoded_train_snippets, snippet_set_size)
-                encoded_snippet_set = encoded_train_snippets[i: i + snippet_set_size]
-                encoded_snippet_set.extend([gold_snippet_encoding])
+                persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
+                neg_snippet_encoding = encoded_train_snippets[neg_snippet_id]
+                gold_snippet_encoding = encoded_train_snippets[i]
+                encoded_snippet_set = [neg_snippet_encoding, gold_snippet_encoding]
 
-                #the last snippet is the matching one
-                labels_list = [0]*snippet_set_size
+                labels_list = [0]
                 gold_label = [1]
                 labels_list = labels_list + gold_label
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
                 snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
 
-
-                #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
-                #afterwards, normalize the output with sigmoid function
+                #send input to distilbert
                 with torch.no_grad():
                     snippet_hidden_states = self.snippet_model(snippet_input_ids)
 
+                #only considers the encoding of the CLS token for each statement in training.
+                #CLS is good for classifying sentences if fine tuning model
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
-                print(str("snippet set features:" + str(snippet_set_features)))
-                print()
+
                 model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
+                print("the model output is: " + str(model_output))
+                print()
                 curr_loss = self.binary_loss(model_output, labels)
+
                 curr_loss.backward()
+
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
                 #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 140:
+                if i == 10:
+                    #print()
+                    #print("the loss after 10 personas: " + str(training_loss))
                     break
 
-                i += snippet_set_size
                 training_loss += curr_loss.item()
 
-            #print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
-            #writer.add_scalar("loss/train", training_loss, epoch)
-            #validation loop
-            #print("moving to validation:")
 
-            #self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
-            #if exceeded_loss:
-            #    break
-        writer.flush()
-        writer.close()
 
-        #save the model
-        #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')"""
+        """
+            i += snippet_set_size
+            training_loss += curr_loss.item()
+
+        #print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
+        #writer.add_scalar("loss/train", training_loss, epoch)
+        #validation loop
+        #print("moving to validation:")
+
+        #self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
+        #if exceeded_loss:
+        #    break
+    writer.flush()
+    writer.close()
+
+    #save the model
+    #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')"""
 
 
 
