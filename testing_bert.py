@@ -27,15 +27,10 @@ def main(train_df, valid_df):
     #creates encoding dictionary of each line in the snippets.
     #after that we create a file storing the persona and snippets
 
-    create_encoding_dict(init_params, training_snippets)
+    encoded_snippets_dict, smallest_convo_size = create_encoding_dict(init_params, training_snippets)
     persona_dict, snippet_dict = create_persona_and_snippet_dict(training_personas, training_snippets)
+    init_params.train_model(training_personas, training_snippets, encoded_snippets_dict)
 
-    #can uncomment below when needing to create neg samples again
-    #create_negative_samples(training_personas, training_snippets, persona_dict, snippet_dict)
-
-
-    #encoded_train_snippets = init_params.encode_snippets(training_snippets)
-    #init_params.train_model(training_personas, training_snippets, encoded_train_snippets)
 
 
 def partition_snippets(first_snippet_list, k):
@@ -60,8 +55,17 @@ def create_encoding_dict(init_params, training_snippets):
         encoded_dict[i] = encoded_gold_snippets
 
     print()
+
+    smallest_convo_size = 10
     for key, val in encoded_dict.items():
-        print("key:" + str(key) + ", val: " + str(val))
+        list_size = len(val)
+        smallest_convo_size = min(smallest_convo_size, list_size)
+
+    print("the smallest convo size is: " + str(smallest_convo_size))
+
+    return encoded_dict, smallest_convo_size
+
+
 
 
 
@@ -317,26 +321,23 @@ class DistilbertTrainingParams:
 
 
 
-    """This function does the actual training over the personas. Need to add including a new random persona
-    every time. Will get from a persona list that I pass in as a parameter."""
-    def train_model(self, training_personas, training_snippets, encoded_train_snippets):
+    """This function does the actual training over the personas."""
+    def train_model(self, training_personas, training_snippets, encoded_snippets_dict):
 
         num_epochs = 1
         train = True
         first_iter = True
-        encoded_dict = {}
-        SNIPPET_SET_SIZE = 1
+        snippet_set_size = 4
         training_size = len(training_snippets)
 
         pos_file = open("positive-training-samples.json", "r")
-        neg_file = open("negative-training-samples.json", "r")
         pos_data = json.load(pos_file)
-        neg_data = json.load(neg_file)
 
 
         for epoch in range(0, num_epochs):
             if epoch > 0:
                 first_iter = False
+                break
 
             self.convo_classifier.persona_distilbert.train()
             self.snippet_model.eval()
@@ -344,25 +345,55 @@ class DistilbertTrainingParams:
 
             for i in range(0, len(training_personas)):
 
-                #encoded snippet set takes from negative training samples snippet id and then accesses the
-                #encoded list
-
                 persona_convo = ' '.join(pos_data[i]['text persona'])
                 snippet_convo = pos_data[i]['text snippet']
-                neg_snippet_id = neg_data[i]['snippet ID']
-                neg_snippet_convo = neg_data[i]['text snippet']
+                persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
+                gold_snippet_encoding = encoded_snippets_dict[i]
+
 
                 print("persona convo: " + str(persona_convo))
                 print()
                 print("snippet convo: " + str(snippet_convo))
                 print()
-                print("negative snippet convo: " + str(neg_snippet_convo))
+                print("persona encoding: " + str(persona_encoding))
 
 
-                persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-                neg_snippet_encoding = encoded_train_snippets[neg_snippet_id]
-                gold_snippet_encoding = encoded_train_snippets[i]
-                encoded_snippet_set = [neg_snippet_encoding, gold_snippet_encoding]
+                for j in range(0, len(training_snippets)):
+
+                    if i + snippet_set_size > training_size:
+                        snippet_set_size = training_size - i
+
+                    #need to modify to make sure i is not the index of the persona at the time.
+                    #take only 4 positive and negative samples
+                    encoded_snippet_set = [encoded_snippets_dict[j][0], encoded_snippets_dict[j + 1][0],
+                    encoded_snippets_dict[j + 2][0], encoded_snippets_dict[j + 3][0]]
+
+                    print("the encoded snippet set: " + str(encoded_snippet_set))
+                    print()
+                    print("gold snippet encoding up to 4th line: " + str(gold_snippet_encoding[0:4]))
+                    print()
+
+                    pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
+                    gold_snippet_encoding[2], gold_snippet_encoding[3]]
+
+                    full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
+
+                    print("the full set: " + str(full_encoded_snippet_set))
+
+
+                    break
+
+                break
+
+
+
+
+
+
+
+
+
+                """encoded_snippet_set = [neg_snippet_encoding, gold_snippet_encoding]
 
                 labels_list = [0]
                 gold_label = [1]
@@ -398,12 +429,11 @@ class DistilbertTrainingParams:
                     #print("the loss after 10 personas: " + str(training_loss))
                     break
 
-                training_loss += curr_loss.item()
+                training_loss += curr_loss.item()"""
 
 
 
-        """
-            i += snippet_set_size
+        """i += snippet_set_size
             training_loss += curr_loss.item()
 
         #print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
@@ -414,11 +444,11 @@ class DistilbertTrainingParams:
         #self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
         #if exceeded_loss:
         #    break
-    writer.flush()
-    writer.close()
+        writer.flush()
+        writer.close()
 
-    #save the model
-    #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')"""
+        #save the model
+        #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')"""
 
 
 
