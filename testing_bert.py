@@ -356,10 +356,13 @@ class DistilbertTrainingParams:
         first_iter = True
         snippet_set_size = 4
         smaller_set = False
-        training_size = len(training_snippets)
+        training_size = 102
 
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
+
+        print("encoded snippets dict:" + str(encoded_snippets_dict))
+        print()
 
 
         for epoch in range(0, num_epochs):
@@ -378,37 +381,36 @@ class DistilbertTrainingParams:
                 persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
                 gold_snippet_encoding = encoded_snippets_dict[i]
 
-
                 """print("persona convo: " + str(persona_convo))
-                print()
                 print("snippet convo: " + str(snippet_convo))
-                print()
                 print("persona encoding: " + str(persona_encoding))"""
 
 
-                for j in range(0, len(training_snippets)):
+                for j in range(0, training_size, snippet_set_size):
 
-                    if i + snippet_set_size > training_size:
-                        snippet_set_size = training_size - i
-                        smaller_set = True
+                    encoded_snippet_set = []
 
+                    if j + snippet_set_size > training_size:
+                        print("in the last set ")
+                        snippet_set_size = training_size - j
+                        for elem in range(j, j + snippet_set_size):
+                            print("on distractor snippet: " + str(elem))
+                            encoded_snippet_set.append(encoded_snippets_dict[elem][0])
 
-                    #encoded_snippet_set = self.verify_distractors(i, j, smaller_set, snippet_set_size, training_size, encoded_snippets_dict)
-                    encoded_snippet_set = [encoded_snippets_dict[j][0], encoded_snippets_dict[j + 1][0],
-                    encoded_snippets_dict[j + 2][0], encoded_snippets_dict[j + 3][0]]
+                    else:
+                        print("on distractor snippet: " + str(j))
+                        #encoded_snippet_set = self.verify_distractors(i, j, smaller_set, snippet_set_size, training_size, encoded_snippets_dict)
+                        encoded_snippet_set = [encoded_snippets_dict[j][0], encoded_snippets_dict[j + 1][0],
+                        encoded_snippets_dict[j + 2][0], encoded_snippets_dict[j + 3][0]]
 
-                    #print("the encoded snippet set: " + str(encoded_snippet_set))
-                    #print()
+                    print("the encoded snippet set: " + str(encoded_snippet_set))
+                    print()
                     #print("gold snippet encoding up to 4th line: " + str(gold_snippet_encoding[0:4]))
                     #print()
 
                     pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
                     gold_snippet_encoding[2], gold_snippet_encoding[3]]
-
                     full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
-                    #print("the full set: " + str(full_encoded_snippet_set))
-                    #print()
-
 
                     #this size of this is 4 except for last set
                     labels_list = [0]*snippet_set_size
@@ -428,9 +430,6 @@ class DistilbertTrainingParams:
                     snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                     torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
-                    print("the hidden states output (features)" + str(torch_snippet_features))
-                    print()
-
                     model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
                     print("the model output is: " + str(model_output))
                     print()
@@ -446,38 +445,7 @@ class DistilbertTrainingParams:
 
 
 
-                    break
-
                 break
-
-
-
-
-
-
-
-
-
-                """
-
-                model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
-                print("the model output is: " + str(model_output))
-                print()
-                curr_loss = self.binary_loss(model_output, labels)
-
-                curr_loss.backward()
-
-                #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
-                #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
-                self.optimizer.step()
-                self.optimizer.zero_grad()
-
-                if i == 10:
-                    #print()
-                    #print("the loss after 10 personas: " + str(training_loss))
-                    break
-
-                training_loss += curr_loss.item()"""
 
 
 
@@ -531,9 +499,6 @@ class DistilBertandBilinear(torch.nn.Module):
         persona_features = persona_hidden_states[0][:, 0, :].to(self.device)
         repl_persona_features = persona_features.repeat(snippet_set_len, 1)
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
-
-        print("the hidden states output of persona given: " + str(torch_persona_features))
-        print()
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
         squeezed_output = torch.squeeze(output, 1)
