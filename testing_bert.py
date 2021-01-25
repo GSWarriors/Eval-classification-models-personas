@@ -48,9 +48,6 @@ def create_encoding_dict(init_params, training_snippets):
         partitioned_gold_snippet = partition_snippets(training_snippets[i], 1)
         partitioned_gold_snippet = list(partitioned_gold_snippet)
 
-        if i == 0:
-            print("first partitioned gold snippet: " + str(partitioned_gold_snippet))
-
         encoded_gold_snippets = init_params.encode_snippets(partitioned_gold_snippet)
         encoded_dict[i] = encoded_gold_snippets
 
@@ -351,19 +348,23 @@ class DistilbertTrainingParams:
     """This function does the actual training over the personas."""
     def train_model(self, training_personas, training_snippets, encoded_snippets_dict):
 
-        num_epochs = 1
+
+        #note on inner loop:
+        #usually don't have to worry about add backward, pytorch returns the last
+        #operation performed on the tensor
+        writer = SummaryWriter('runs/bert_classifier')
+        num_epochs = 2
         train = True
         first_iter = True
         snippet_set_size = 4
-        smaller_set = False
         training_size = 102
+        start_time = 0
+        end_time = 0
+
+
 
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
-
-        print("encoded snippets dict:" + str(encoded_snippets_dict))
-        print()
-
 
         for epoch in range(0, num_epochs):
             if epoch > 0:
@@ -372,19 +373,22 @@ class DistilbertTrainingParams:
 
             self.convo_classifier.persona_distilbert.train()
             self.snippet_model.eval()
-            training_loss = 0
+
+            training_loop_losses = []
 
             for i in range(0, len(training_personas)):
 
+                start_time = time.perf_counter()
                 persona_convo = ' '.join(pos_data[i]['text persona'])
                 snippet_convo = pos_data[i]['text snippet']
                 persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
                 gold_snippet_encoding = encoded_snippets_dict[i]
 
-                """print("persona convo: " + str(persona_convo))
-                print("snippet convo: " + str(snippet_convo))
-                print("persona encoding: " + str(persona_encoding))"""
+                #print("persona convo: " + str(persona_convo))
+                #print("snippet convo: " + str(snippet_convo))
 
+                training_loss = 0
+                print("starting training iteration: " + str(i))
 
                 for j in range(0, training_size, snippet_set_size):
 
@@ -403,10 +407,9 @@ class DistilbertTrainingParams:
                         encoded_snippet_set = [encoded_snippets_dict[j][0], encoded_snippets_dict[j + 1][0],
                         encoded_snippets_dict[j + 2][0], encoded_snippets_dict[j + 3][0]]
 
-                    print("the encoded snippet set: " + str(encoded_snippet_set))
-                    print()
-                    #print("gold snippet encoding up to 4th line: " + str(gold_snippet_encoding[0:4]))
+                    #print("the encoded snippet set: " + str(encoded_snippet_set))
                     #print()
+
 
                     pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
                     gold_snippet_encoding[2], gold_snippet_encoding[3]]
@@ -431,27 +434,37 @@ class DistilbertTrainingParams:
                     torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
                     model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
-                    print("the model output is: " + str(model_output))
-                    print()
+                    #print("the model output is: " + str(model_output))
+                    #print()
+
                     curr_loss = self.binary_loss(model_output, labels)
-                    print("the current loss is: " + str(curr_loss.item()))
-
-                    curr_loss.backward()
-
-                    #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
-                    #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
-                    self.optimizer.step()
-                    self.optimizer.zero_grad()
+                    training_loss += curr_loss
 
 
+                snippet_set_size = 4
+                training_loop_losses.append(training_loss.item())
+                print("the total loss for this iteration: " + str(training_loss))
+                training_loss.backward()
 
-                break
+                #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
+                #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
+                self.optimizer.step()
+                self.optimizer.zero_grad()
+                end_time = time.perf_counter()
+                print("total time it took for the loop: " + str(end_time - start_time))
+                print()
+
+                if i == 3:
+                    break
+
+        print("the losses for this training loop: " + str(training_loop_losses))
+        training_loop_losses = sum(training_loop_losses)
+        print("the total loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
+    
 
 
 
-        """i += snippet_set_size
-            training_loss += curr_loss.item()
-
+        """
         #print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
         #writer.add_scalar("loss/train", training_loss, epoch)
         #validation loop
@@ -465,7 +478,6 @@ class DistilbertTrainingParams:
 
         #save the model
         #torch.save(self.convo_classifier, 'mysavedmodels/model.pt')"""
-
 
 
 
