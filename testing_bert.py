@@ -353,15 +353,13 @@ class DistilbertTrainingParams:
         #usually don't have to worry about add backward, pytorch returns the last
         #operation performed on the tensor
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 2
+        num_epochs = 5
         train = True
         first_iter = True
         snippet_set_size = 4
-        training_size = 102
+        training_size = 4
         start_time = 0
         end_time = 0
-
-
 
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
@@ -369,21 +367,19 @@ class DistilbertTrainingParams:
         for epoch in range(0, num_epochs):
             if epoch > 0:
                 first_iter = False
-                break
 
             self.convo_classifier.persona_distilbert.train()
             self.snippet_model.eval()
 
             training_loop_losses = []
+            start_time = time.perf_counter()
 
             for i in range(0, len(training_personas)):
 
-                start_time = time.perf_counter()
                 persona_convo = ' '.join(pos_data[i]['text persona'])
                 snippet_convo = pos_data[i]['text snippet']
                 persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
                 gold_snippet_encoding = encoded_snippets_dict[i]
-
                 #print("persona convo: " + str(persona_convo))
                 #print("snippet convo: " + str(snippet_convo))
 
@@ -400,16 +396,11 @@ class DistilbertTrainingParams:
                         for elem in range(j, j + snippet_set_size):
                             print("on distractor snippet: " + str(elem))
                             encoded_snippet_set.append(encoded_snippets_dict[elem][0])
-
                     else:
-                        print("on distractor snippet: " + str(j))
+
                         #encoded_snippet_set = self.verify_distractors(i, j, smaller_set, snippet_set_size, training_size, encoded_snippets_dict)
                         encoded_snippet_set = [encoded_snippets_dict[j][0], encoded_snippets_dict[j + 1][0],
                         encoded_snippets_dict[j + 2][0], encoded_snippets_dict[j + 3][0]]
-
-                    #print("the encoded snippet set: " + str(encoded_snippet_set))
-                    #print()
-
 
                     pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
                     gold_snippet_encoding[2], gold_snippet_encoding[3]]
@@ -418,10 +409,8 @@ class DistilbertTrainingParams:
                     #this size of this is 4 except for last set
                     labels_list = [0]*snippet_set_size
                     gold_labels = [1, 1, 1, 1]
-
                     labels_list = labels_list + gold_labels
                     labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
-
                     padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
                     snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
 
@@ -432,14 +421,12 @@ class DistilbertTrainingParams:
 
                     snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                     torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
-
                     model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
                     #print("the model output is: " + str(model_output))
                     #print()
 
                     curr_loss = self.binary_loss(model_output, labels)
                     training_loss += curr_loss
-
 
                 snippet_set_size = 4
                 training_loop_losses.append(training_loss.item())
@@ -450,24 +437,22 @@ class DistilbertTrainingParams:
                 #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
                 self.optimizer.step()
                 self.optimizer.zero_grad()
-                end_time = time.perf_counter()
-                print("total time it took for the loop: " + str(end_time - start_time))
-                print()
 
-                if i == 3:
-                    break
 
-        print("the losses for this training loop: " + str(training_loop_losses))
-        training_loop_losses = sum(training_loop_losses)
-        print("the total loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
-    
+            training_loop_losses = sum(training_loop_losses)
+            print("the total loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
+            writer.add_scalar("loss/train", training_loop_losses, epoch)
 
+            end_time = time.perf_counter()
+            print("total time it took for this epoch: " + str(end_time - start_time))
+            print()
+
+
+        writer.flush()
+        writer.close()
 
 
         """
-        #print("training loss:" + str(training_loss) + " , epoch: " + str(epoch))
-        #writer.add_scalar("loss/train", training_loss, epoch)
-        #validation loop
         #print("moving to validation:")
 
         #self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
