@@ -39,10 +39,12 @@ def main(train_df, valid_df):
     train_persona_dict, train_snippet_dict = create_training_file(training_personas, training_snippets)
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
 
-    print("validation persona dict: " + str(valid_persona_dict))
-    print()
-    print("validation snippet dict: " + str(valid_snippet_dict))
-    #init_params.train_model(training_personas, training_snippets, encoded_snippets_dict)
+
+    #consider removing training snippets and validation snippets if possible
+    init_params.train_model(training_personas, validation_personas, training_snippets, validation_snippets,
+    encoded_training_dict, encoded_validation_dict)
+
+
 
 
 
@@ -250,84 +252,109 @@ class DistilbertTrainingParams:
         return encoded_snippets
 
 
-    """doing validation using snippet random sampling (size 7) with gold snippets at end of snippet set"""
-    def validate_model(self, validation_personas, encoded_val_snippets, epoch, first_iter, writer):
 
+    def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
+
+        snippet_set_size = 4
+        validation_size = 10
         validation_loss = 0
-        snippet_set_size = 7
-        validation_size = len(validation_personas)
 
-        #go through entire persona list and randomly sample snippets. Then, calculate forward
-        #on the randomly sampled set and persona.
+        val_file = open("positive-validation-samples.json", "r")
+        val_data = json.load(val_file)
+        validation_loop_losses = []
 
         with torch.no_grad():
             self.convo_classifier.persona_distilbert.eval()
 
-            i = 0
-            while i < validation_size:
-                #last set of snippets if at end of training
-                if i + snippet_set_size > validation_size:
-                    snippet_set_size = validation_size - i
+            for i in range(0, len(validation_personas)):
 
-                persona_convo = ' '.join(validation_personas[i])
+                persona_convo = ' '.join(val_data[i]['text persona'])
+                snippet_convo = val_data[i]['text snippet']
                 persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-                gold_snippet_encoding = encoded_val_snippets[i]
+                gold_snippet_encoding = encoded_validation_dict[i]
 
                 encoded_snippet_set = []
-                encoded_snippet_set = encoded_val_snippets[i: i + snippet_set_size]
-                encoded_snippet_set.extend([gold_snippet_encoding])
-                #print("the encoded snippet set: " + str(encoded_snippet_set))
+                print("starting validation iteration: " + str(i))
 
+                if i + (snippet_set_size/2) >= validation_size and i - snippet_set_size >= 0:
+                    #print("nearing the end ")
+
+                    #take the preceding 4 snippets as distractors
+                    for elem in range(i - snippet_set_size, i):
+                        #print("on distractor snippet: " + str(elem))
+                        encoded_snippet_set.append(encoded_validation_dict[elem][0])
+
+                elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < validation_size:
+
+                    #print("starting out ")
+                    #take the proceeding 4 snippets as distractors
+                    for elem in range(i + 1, i + snippet_set_size + 1):
+                        #print("on distractor snippet: " + str(elem))
+                        encoded_snippet_set.append(encoded_validation_dict[elem][0])
+
+                else:
+                    encoded_snippet_set = [encoded_validation_dict[i - 2][0], encoded_validation_dict[i - 1][0],
+                    encoded_validation_dict[i + 1][0], encoded_validation_dict[i + 2][0]]
+
+
+                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
+                gold_snippet_encoding[2], gold_snippet_encoding[3]]
+                full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
+
+                #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_label = [1]
-                labels_list = labels_list + gold_label
+                gold_labels = [1, 1, 1, 1]
+                labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
 
-                padded_snippet, snippet_attention_mask = add_padding_and_mask(encoded_snippet_set)
+                padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
                 snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
-
+                #send input to distilbert
                 with torch.no_grad():
                     snippet_hidden_states = self.snippet_model(snippet_input_ids)
 
-                #output for distilbert CLS token for each row- gets features for persona embedding. then replicate over snippet set.
-                #afterwards, normalize the output with sigmoid function
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
+                model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+                #print("the model output is: " + str(model_output))
+                #print()
 
-                model_output = self.convo_classifier.forward(persona_encoding, len(encoded_snippet_set), torch_snippet_features)
                 curr_loss = self.binary_loss(model_output, labels)
+                validation_loss += curr_loss
 
-                print("validating snippet number: " + str(i))
+                snippet_set_size = 4
+                validation_loop_losses.append(validation_loss.item())
 
-                #show loss after going through 20 validation personas
-                if i == 70:
+                if i == 5:
                     break
 
-                i += snippet_set_size
-                validation_loss += curr_loss.item()
 
-                """if not first_iter and total_loss > self.max_loss:
-                    print("we have exceeded the validation loss from last time, breaking from validation")
-                    print("the loss that exceeded: " + str(total_loss))
-                    writer.add_scalar("loss/validation", total_loss, epoch)
-                    return True"""
+            validation_loop_losses = sum(validation_loop_losses)
+            print("the total validation loss for epoch " + str(epoch) +  ": " + str(validation_loop_losses))
+            writer.add_scalar("loss/validation", validation_loss, epoch)
 
 
-        print("the loss for this epoch is: " + str(validation_loss))
-        #writer.add_scalar("loss/validation", validation_loss, epoch)
+
+                #if not first_iter and total_loss > self.max_loss:
+                #    print("we have exceeded the validation loss from last time, breaking from validation")
+                #    print("the loss that exceeded: " + str(total_loss))
+                #    writer.add_scalar("loss/validation", total_loss, epoch)
+                #    return True
+
         #self.max_loss = max(self.max_loss, validation_loss)
-        #print("the max loss is saved as: " + str(self.max_loss))
+        #print("the max loss is saved as: " + str(self.max_loss))"""
 
 
 
 
 
     """This function does the actual training over the personas."""
-    def train_model(self, training_personas, training_snippets, encoded_snippets_dict):
+    def train_model(self, training_personas, validation_personas, training_snippets, validation_snippets,
+    encoded_training_dict, encoded_validation_dict):
 
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 5
+        num_epochs = 1
         train = True
         first_iter = True
         snippet_set_size = 4
@@ -354,7 +381,7 @@ class DistilbertTrainingParams:
                 persona_convo = ' '.join(pos_data[i]['text persona'])
                 snippet_convo = pos_data[i]['text snippet']
                 persona_encoding = [self.persona_tokenizer.encode(persona_convo, add_special_tokens=True)]
-                gold_snippet_encoding = encoded_snippets_dict[i]
+                gold_snippet_encoding = encoded_training_dict[i]
                 #print("persona convo: " + str(persona_convo))
                 #print("snippet convo: " + str(snippet_convo))
 
@@ -363,24 +390,24 @@ class DistilbertTrainingParams:
                 print("starting training iteration: " + str(i))
 
                 if i + (snippet_set_size/2) >= training_size and i - snippet_set_size >= 0:
-                    print("nearing the end ")
+                    #print("nearing the end ")
 
                     #take the preceding 4 snippets as distractors
                     for elem in range(i - snippet_set_size, i):
-                        print("on distractor snippet: " + str(elem))
-                        encoded_snippet_set.append(encoded_snippets_dict[elem][0])
+                        #print("on distractor snippet: " + str(elem))
+                        encoded_snippet_set.append(encoded_training_dict[elem][0])
 
                 elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < training_size:
 
-                    print("starting out ")
+                    #print("starting out ")
                     #take the proceeding 4 snippets as distractors
                     for elem in range(i + 1, i + snippet_set_size + 1):
-                        print("on distractor snippet: " + str(elem))
-                        encoded_snippet_set.append(encoded_snippets_dict[elem][0])
+                        #print("on distractor snippet: " + str(elem))
+                        encoded_snippet_set.append(encoded_training_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_snippets_dict[i - 2][0], encoded_snippets_dict[i - 1][0],
-                    encoded_snippets_dict[i + 1][0], encoded_snippets_dict[i + 2][0]]
+                    encoded_snippet_set = [encoded_training_dict[i - 2][0], encoded_training_dict[i - 1][0],
+                    encoded_training_dict[i + 1][0], encoded_training_dict[i + 2][0]]
 
 
                 pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
@@ -422,12 +449,12 @@ class DistilbertTrainingParams:
                     break
 
             training_loop_losses = sum(training_loop_losses)
-            print("the total loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
+            print("the total training loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
             writer.add_scalar("loss/train", training_loop_losses, epoch)
 
-            #add validation loop here (use prev function)
-            #can implement early stopping using validation if wanted
-            #just torch.no_Grad and classifier.eval() mode
+            #validation loop here
+            self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+
 
             end_time = time.perf_counter()
             print("total time it took for this epoch: " + str(end_time - start_time))
