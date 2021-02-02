@@ -13,23 +13,36 @@ import itertools
 import json
 
 
+"""
+Main separates dataset:
+1. into personas and snippets
+2. Initializes distilbert-bilinear model and creates dictionary with speaker tokens
+3. encodes each line of the personas/snippets and puts them into a dictionary
+4. adds file positive-training-samples.json
+5. trains the model
+
+"""
+
+
 
 def main(train_df, valid_df):
 
-    #separate snippets into training and validation sets.
     training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
-    #validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
+    validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    #store the encoded first lines of snippets into this variable
     init_params = DistilbertTrainingParams()
     init_params.create_tokens_dict()
 
-    #creates encoding dictionary of each line in the snippets.
-    #after that we create a file storing the persona and snippets
+    encoded_training_dict, smallest_convo_size = create_encoding_dict(init_params, training_snippets)
+    encoded_validation_dict, smallest_convo_size = create_encoding_dict(init_params, validation_snippets)
 
-    encoded_snippets_dict, smallest_convo_size = create_encoding_dict(init_params, training_snippets)
-    persona_dict, snippet_dict = create_persona_and_snippet_dict(training_personas, training_snippets)
-    init_params.train_model(training_personas, training_snippets, encoded_snippets_dict)
+    train_persona_dict, train_snippet_dict = create_training_file(training_personas, training_snippets)
+    valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
+
+    print("validation persona dict: " + str(valid_persona_dict))
+    print()
+    print("validation snippet dict: " + str(valid_snippet_dict))
+    #init_params.train_model(training_personas, training_snippets, encoded_snippets_dict)
 
 
 
@@ -39,76 +52,38 @@ def partition_snippets(first_snippet_list, k):
         yield first_snippet_list[i: i + k]
 
 
-def create_encoding_dict(init_params, training_snippets):
+def create_encoding_dict(init_params, snippets):
 
 
     encoded_dict = {}
 
-    for i in range(0, len(training_snippets)):
-        partitioned_gold_snippet = partition_snippets(training_snippets[i], 1)
+    for i in range(0, len(snippets)):
+
+        partitioned_gold_snippet = partition_snippets(snippets[i], 1)
         partitioned_gold_snippet = list(partitioned_gold_snippet)
 
         encoded_gold_snippets = init_params.encode_snippets(partitioned_gold_snippet)
         encoded_dict[i] = encoded_gold_snippets
 
-    #print()
+        #if i == 0:
+        #    print("encoding snippet 0")
+        #    print("the snippets: " + str(snippets[0]))
+        #    print("encoded dict at 0: " + str(encoded_dict[0]))
+
 
     smallest_convo_size = 10
     for key, val in encoded_dict.items():
         list_size = len(val)
         smallest_convo_size = min(smallest_convo_size, list_size)
 
-    #print("the smallest convo size is: " + str(smallest_convo_size))
+    print("the smallest convo size is: " + str(smallest_convo_size))
 
     return encoded_dict, smallest_convo_size
 
 
 
 
-
-
-def create_negative_samples(training_personas, training_snippets, persona_dict, snippet_dict):
-
-    #this function creates negative samples, and checks whether or not the negative samples id are
-    #equal to i. However, doesn't check whether an id has already been assigned (can use same one twice).
-    #can change this later
-    neg_list = []
-    NUM_SAMPLES = 10
-    neg_persona_dict = {}
-    neg_snippet_dict = {}
-
-
-    with open("negative-training-samples.json", "w+") as neg_file:
-        for i in range(0, len(persona_dict)):
-            sample_assigned = False
-            sampled_ids = rand.sample(range(0, len(snippet_dict)), NUM_SAMPLES)
-            #print("the sampled ids are: " + str(sampled_ids))
-
-
-            for j in range(0, len(sampled_ids)):
-                if i != sampled_ids[j]:
-                    data = {
-                        "ID": i,
-                        "text persona": persona_dict[i],
-                        "text snippet": snippet_dict[sampled_ids[j]],
-                        "class": 0,
-                        "snippet ID": sampled_ids[j]
-                    }
-
-                    neg_list.append(data)
-                    break
-
-
-        json.dump(neg_list, neg_file, indent=4)
-        neg_file.close()
-
-
-
-
-
-
-
-def create_persona_and_snippet_dict(training_personas, training_snippets):
+def create_training_file(training_personas, training_snippets):
 
     persona_dict = {}
     snippet_dict = {}
@@ -136,6 +111,37 @@ def create_persona_and_snippet_dict(training_personas, training_snippets):
 
 
     return persona_dict, snippet_dict
+
+
+
+def create_validation_file(validation_personas, validation_snippets):
+    persona_dict = {}
+    snippet_dict = {}
+
+    for i in range(0, len(validation_personas)):
+        persona_dict[i] = validation_personas[i]
+        snippet_dict[i] = validation_snippets[i]
+
+    #create new json file
+    pos_list = []
+
+    with open("positive-validation-samples.json", "w+") as pos_file:
+        for i in range(0, len(validation_personas)):
+            data = {
+                "ID": i,
+                "text persona": persona_dict[i],
+                "text snippet": snippet_dict[i],
+                "class": 1
+            }
+
+            pos_list.append(data)
+
+        json.dump(pos_list, pos_file, indent=4)
+    pos_file.close()
+
+
+    return persona_dict, snippet_dict
+
 
 
 
@@ -320,9 +326,6 @@ class DistilbertTrainingParams:
     def train_model(self, training_personas, training_snippets, encoded_snippets_dict):
 
 
-        #note on inner loop:
-        #usually don't have to worry about add backward, pytorch returns the last
-        #operation performed on the tensor
         writer = SummaryWriter('runs/bert_classifier')
         num_epochs = 5
         train = True
@@ -355,12 +358,11 @@ class DistilbertTrainingParams:
                 #print("persona convo: " + str(persona_convo))
                 #print("snippet convo: " + str(snippet_convo))
 
-
                 training_loss = 0
                 encoded_snippet_set = []
                 print("starting training iteration: " + str(i))
 
-                if i + (snippet_set_size/2) > training_size and i - snippet_set_size >= 0:
+                if i + (snippet_set_size/2) >= training_size and i - snippet_set_size >= 0:
                     print("nearing the end ")
 
                     #take the preceding 4 snippets as distractors
@@ -408,7 +410,7 @@ class DistilbertTrainingParams:
 
                 snippet_set_size = 4
                 training_loop_losses.append(training_loss.item())
-                print("the total loss for this iteration: " + str(training_loss))
+                #print("the total loss for this iteration: " + str(training_loss))
                 training_loss.backward()
 
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
@@ -423,12 +425,16 @@ class DistilbertTrainingParams:
             print("the total loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
             writer.add_scalar("loss/train", training_loop_losses, epoch)
 
+            #add validation loop here (use prev function)
+            #can implement early stopping using validation if wanted
+            #just torch.no_Grad and classifier.eval() mode
+
             end_time = time.perf_counter()
             print("total time it took for this epoch: " + str(end_time - start_time))
             print()
 
-            writer.flush()
-            writer.close()
+        writer.flush()
+        writer.close()
 
 
 
