@@ -346,7 +346,6 @@ class DistilbertTrainingParams:
     """This function does the actual training over the personas."""
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
-
         writer = SummaryWriter('runs/bert_classifier')
         num_epochs = 1
         train = True
@@ -423,10 +422,11 @@ class DistilbertTrainingParams:
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
-                #print("the model output is: " + str(model_output))
-                #print()
+                print("the model output is: " + str(model_output))
+                print()
 
-                curr_loss = self.binary_loss(model_output, labels)
+                break
+                """curr_loss = self.binary_loss(model_output, labels)
                 training_loss += curr_loss
 
                 snippet_set_size = 4
@@ -457,14 +457,14 @@ class DistilbertTrainingParams:
         writer.flush()
         writer.close()
         #save the model
-        #torch.save(self.convo_classifier.state_dict(), 'mysavedmodels/model.pt')
+        torch.save(self.convo_classifier.state_dict(), 'mysavedmodels/model.pt')"""
+
+
 
 
 
         """
         #print("moving to validation:")
-
-        #self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
         #if exceeded_loss:
         #    break"""
 
@@ -482,12 +482,14 @@ class DistilBertandBilinear(torch.nn.Module):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.persona_distilbert = persona_distilbert
         self.bilinear_layer = bilinear_layer
+        self.distilbert_size = 768
 
 
     #can modify to find hidden states without detaching to numpy? (requires more computation)
     def forward(self, persona_encoding, snippet_set_len, torch_snippet_features):
 
-        sigmoid = torch.nn.Sigmoid()
+        my_softmax = torch.nn.Softmax(dim = 0)
+
         padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
         persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(self.device)
 
@@ -499,23 +501,30 @@ class DistilBertandBilinear(torch.nn.Module):
         repl_persona_features = persona_features.repeat(snippet_set_len, 1)
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
-        print("torch persona features: " + str(torch_persona_features))
-        print("torch snippet features: " + str(torch_snippet_features))
-        print()
+        #take avg of 2 vectors and then do logistic regression model
+        output = torch_persona_features.add(torch_snippet_features)
+        output = torch.div(output, 2)
 
-
-
-        output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        print("bilinear output: " + str(output))
-
-
+        linear_output = torch.nn.Linear(self.distilbert_size, 1)
+        output = linear_output(output)
+        print("the output: " + str(output))
         squeezed_output = torch.squeeze(output, 1)
-        model_output = sigmoid(squeezed_output)
-        #print("predicted normalized output between 1 and 0: " + str(model_output))
+
+        model_output = my_softmax(squeezed_output)
         return model_output
 
 
+        """
+        my suggested baseline model (takes avg of everything)
 
+        ones_col = torch.ones(self.distilbert_size, 1)
+        #multiple the two tensors together
+        output = torch.matmul(output, ones_col)/self.distilbert_size
+        print("the output of the multiplacation: " + str(output))
+        print("the size: " + str(output.size()))
+
+        squeezed_output = torch.squeeze(output, 1)
+        print("squeezed output size:  "+ str(squeezed_output.size()))"""
 
 
 
