@@ -222,7 +222,8 @@ class DistilbertTrainingParams:
         self.snippet_model = self.snippet_model_class.from_pretrained('./model')
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.binary_loss = torch.nn.BCELoss()
+        #self.binary_loss = torch.nn.BCELoss()
+        self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
         self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
         self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
@@ -347,10 +348,10 @@ class DistilbertTrainingParams:
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 1
+        num_epochs = 5
         train = True
         first_iter = True
-        snippet_set_size = 4
+        snippet_set_size = 6
 
         training_size = 10
         start_time = 0
@@ -399,19 +400,21 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_training_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_training_dict[i - 2][0], encoded_training_dict[i - 1][0],
-                    encoded_training_dict[i + 1][0], encoded_training_dict[i + 2][0]]
+                    encoded_snippet_set = [encoded_training_dict[i - 3][0], encoded_training_dict[i - 2][0],
+                    encoded_training_dict[i - 1][0], encoded_training_dict[i + 1][0], encoded_training_dict[i + 2][0],
+                    encoded_training_dict[i + 3][0]]
 
+                #print("the encoded snippet set: " + str(encoded_snippet_set))
+                #print()
 
-                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
-                gold_snippet_encoding[2], gold_snippet_encoding[3]]
+                pos_snippet_encodings = [gold_snippet_encoding[0]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1]
+                gold_labels = [1]
                 labels_list = labels_list + gold_labels
-                labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
+                labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=self.device)
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
                 snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
 
@@ -422,16 +425,14 @@ class DistilbertTrainingParams:
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
-                print("the model output is: " + str(model_output))
-                print()
 
-                break
-                """curr_loss = self.binary_loss(model_output, labels)
+                curr_loss = self.cross_entropy_loss(model_output, labels)
                 training_loss += curr_loss
 
-                snippet_set_size = 4
+                snippet_set_size = 6
                 training_loop_losses.append(training_loss.item())
-                #print("the total loss for this iteration: " + str(training_loss))
+                print("the total loss for this iteration: " + str(training_loss))
+                print()
                 training_loss.backward()
 
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
@@ -439,8 +440,9 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 0:
+                if i == 10:
                     break
+
 
             training_loop_losses = sum(training_loop_losses)
             print("the total training loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
@@ -448,19 +450,16 @@ class DistilbertTrainingParams:
             #validation loop here
             #self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
-
-
             end_time = time.perf_counter()
             print("total time it took for this epoch: " + str(end_time - start_time))
             print()
 
         writer.flush()
         writer.close()
+
+
         #save the model
-        torch.save(self.convo_classifier.state_dict(), 'mysavedmodels/model.pt')"""
-
-
-
+        #torch.save(self.convo_classifier.state_dict(), 'mysavedmodels/model.pt')"""
 
 
         """
@@ -501,17 +500,23 @@ class DistilBertandBilinear(torch.nn.Module):
         repl_persona_features = persona_features.repeat(snippet_set_len, 1)
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
-        #take avg of 2 vectors and then do logistic regression model
-        output = torch_persona_features.add(torch_snippet_features)
-        output = torch.div(output, 2)
+        #concat here instead
 
-        linear_output = torch.nn.Linear(self.distilbert_size, 1)
+        output = torch.cat((torch_persona_features, torch_snippet_features), 1)
+        linear_output = torch.nn.Linear(self.distilbert_size*2, 2)
         output = linear_output(output)
-        print("the output: " + str(output))
-        squeezed_output = torch.squeeze(output, 1)
 
-        model_output = my_softmax(squeezed_output)
+        #print("output: " + str(output))
+        #print("the output shape: " + str(output.shape))
+
+        #squeezed_output = torch.squeeze(output, 1)
+        model_output = my_softmax(output)
+        #print("softmax output: " + str(model_output))
         return model_output
+
+
+
+
 
 
         """
