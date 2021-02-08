@@ -222,9 +222,11 @@ class DistilbertTrainingParams:
         self.snippet_model = self.snippet_model_class.from_pretrained('./model')
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        #self.binary_loss = torch.nn.BCELoss()
+        self.binary_loss = torch.nn.BCELoss()
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
-        self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
+        self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 2)
+        #self.torch.nn.Linear(self.distilbert_size*2, 2)
+
         self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
         self.max_loss = 0
@@ -348,7 +350,7 @@ class DistilbertTrainingParams:
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 5
+        num_epochs = 1
         train = True
         first_iter = True
         snippet_set_size = 6
@@ -426,6 +428,7 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
+                #curr_loss = self.binary_loss(model_output, labels)
                 curr_loss = self.cross_entropy_loss(model_output, labels)
                 training_loss += curr_loss
 
@@ -500,17 +503,10 @@ class DistilBertandBilinear(torch.nn.Module):
         repl_persona_features = persona_features.repeat(snippet_set_len, 1)
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
-        #concat here instead
+        output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
 
-        output = torch.cat((torch_persona_features, torch_snippet_features), 1)
-        linear_output = torch.nn.Linear(self.distilbert_size*2, 2)
-        output = linear_output(output)
-
-        #print("output: " + str(output))
-        #print("the output shape: " + str(output.shape))
-
-        #squeezed_output = torch.squeeze(output, 1)
-        model_output = my_softmax(output)
+        squeezed_output = torch.squeeze(output, 1)
+        model_output = my_softmax(squeezed_output)
         #print("softmax output: " + str(model_output))
         return model_output
 
