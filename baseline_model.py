@@ -222,10 +222,8 @@ class DistilbertTrainingParams:
         self.snippet_model = self.snippet_model_class.from_pretrained('./model')
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.binary_loss = torch.nn.BCELoss()
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
         self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 2)
-        #self.torch.nn.Linear(self.distilbert_size*2, 2)
 
         self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
@@ -350,7 +348,7 @@ class DistilbertTrainingParams:
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 1
+        num_epochs = 5
         train = True
         first_iter = True
         snippet_set_size = 6
@@ -428,7 +426,6 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                #curr_loss = self.binary_loss(model_output, labels)
                 curr_loss = self.cross_entropy_loss(model_output, labels)
                 training_loss += curr_loss
 
@@ -490,8 +487,6 @@ class DistilBertandBilinear(torch.nn.Module):
     #can modify to find hidden states without detaching to numpy? (requires more computation)
     def forward(self, persona_encoding, snippet_set_len, torch_snippet_features):
 
-        my_softmax = torch.nn.Softmax(dim = 0)
-
         padded_persona, persona_attention_mask = add_padding_and_mask(persona_encoding)
         persona_input_ids = torch.from_numpy(padded_persona).type(torch.long).to(self.device)
 
@@ -504,29 +499,9 @@ class DistilBertandBilinear(torch.nn.Module):
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-
         squeezed_output = torch.squeeze(output, 1)
-        model_output = my_softmax(squeezed_output)
-        #print("softmax output: " + str(model_output))
-        return model_output
-
-
-
-
-
-
-        """
-        my suggested baseline model (takes avg of everything)
-
-        ones_col = torch.ones(self.distilbert_size, 1)
-        #multiple the two tensors together
-        output = torch.matmul(output, ones_col)/self.distilbert_size
-        print("the output of the multiplacation: " + str(output))
-        print("the size: " + str(output.size()))
-
-        squeezed_output = torch.squeeze(output, 1)
-        print("squeezed output size:  "+ str(squeezed_output.size()))"""
-
+        #print("output: " + str(squeezed_output))
+        return squeezed_output
 
 
 
