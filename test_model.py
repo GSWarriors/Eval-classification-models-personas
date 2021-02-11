@@ -251,7 +251,7 @@ class DistilbertTrainingParams:
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
-        snippet_set_size = 4
+        snippet_set_size = 6
         validation_size = 10
         validation_loss = 0
 
@@ -289,17 +289,16 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_validation_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_validation_dict[i - 2][0], encoded_validation_dict[i - 1][0],
-                    encoded_validation_dict[i + 1][0], encoded_validation_dict[i + 2][0]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 3][0], encoded_validation_dict[i - 2][0], encoded_validation_dict[i - 1][0],
+                    encoded_validation_dict[i + 1][0], encoded_validation_dict[i + 2][0], encoded_validation_dict[i + 3][0]]
 
 
-                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
-                gold_snippet_encoding[2], gold_snippet_encoding[3]]
+                pos_snippet_encodings = [gold_snippet_encoding[0]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1]
+                gold_labels = [1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
 
@@ -318,10 +317,10 @@ class DistilbertTrainingParams:
                 curr_loss = self.binary_loss(model_output, labels)
                 validation_loss += curr_loss
 
-                snippet_set_size = 4
+                snippet_set_size = 6
                 validation_loop_losses.append(validation_loss.item())
 
-                if i == 5:
+                if i == 10:
                     break
 
 
@@ -348,12 +347,12 @@ class DistilbertTrainingParams:
 
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 1
+        num_epochs = 3
         train = True
         first_iter = True
-        snippet_set_size = 4
+        snippet_set_size = 6
 
-        training_size = 10
+        training_size = 20
         start_time = 0
         end_time = 0
 
@@ -400,17 +399,16 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_training_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_training_dict[i - 2][0], encoded_training_dict[i - 1][0],
-                    encoded_training_dict[i + 1][0], encoded_training_dict[i + 2][0]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 3][0], encoded_training_dict[i - 2][0], encoded_training_dict[i - 1][0],
+                    encoded_training_dict[i + 1][0], encoded_training_dict[i + 2][0],  encoded_validation_dict[i + 3][0]]
 
 
-                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
-                gold_snippet_encoding[2], gold_snippet_encoding[3]]
+                pos_snippet_encodings = [gold_snippet_encoding[0]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
-                #this size of this is 4 except for last set
+                #this size of this is 6 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1]
+                gold_labels = [1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
@@ -429,9 +427,9 @@ class DistilbertTrainingParams:
                 curr_loss = self.binary_loss(model_output, labels)
                 training_loss += curr_loss
 
-                snippet_set_size = 4
+                snippet_set_size = 6
                 training_loop_losses.append(training_loss.item())
-                #print("the total loss for this iteration: " + str(training_loss))
+                print("the total loss for this iteration: " + str(training_loss))
                 training_loss.backward()
 
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
@@ -439,7 +437,7 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 0:
+                if i == 20:
                     break
 
             training_loop_losses = sum(training_loop_losses)

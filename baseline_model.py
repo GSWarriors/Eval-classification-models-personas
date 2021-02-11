@@ -252,7 +252,7 @@ class DistilbertTrainingParams:
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
-        snippet_set_size = 4
+        snippet_set_size = 6
         validation_size = 10
         validation_loss = 0
 
@@ -276,33 +276,31 @@ class DistilbertTrainingParams:
                 if i + (snippet_set_size/2) >= validation_size and i - snippet_set_size >= 0:
                     #print("nearing the end ")
 
-                    #take the preceding 4 snippets as distractors
+                    #take the preceding 6 snippets as distractors
                     for elem in range(i - snippet_set_size, i):
                         #print("on distractor snippet: " + str(elem))
                         encoded_snippet_set.append(encoded_validation_dict[elem][0])
 
                 elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < validation_size:
 
-                    #print("starting out ")
-                    #take the proceeding 4 snippets as distractors
+                    #take the proceeding 6 snippets as distractors
                     for elem in range(i + 1, i + snippet_set_size + 1):
                         #print("on distractor snippet: " + str(elem))
                         encoded_snippet_set.append(encoded_validation_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_validation_dict[i - 2][0], encoded_validation_dict[i - 1][0],
-                    encoded_validation_dict[i + 1][0], encoded_validation_dict[i + 2][0]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 3][0], encoded_validation_dict[i - 2][0], encoded_validation_dict[i - 1][0],
+                    encoded_validation_dict[i + 1][0], encoded_validation_dict[i + 2][0], encoded_validation_dict[i + 3][0]]
 
 
-                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1],
-                gold_snippet_encoding[2], gold_snippet_encoding[3]]
+                pos_snippet_encodings = [gold_snippet_encoding[0]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
-                #this size of this is 4 except for last set
+                #this size of this is 6 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1]
+                gold_labels = [1]
                 labels_list = labels_list + gold_labels
-                labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
+                labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=self.device)
 
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
                 snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
@@ -316,10 +314,10 @@ class DistilbertTrainingParams:
                 #print("the model output is: " + str(model_output))
                 #print()
 
-                curr_loss = self.binary_loss(model_output, labels)
+                curr_loss = self.cross_entropy_loss(model_output, labels)
                 validation_loss += curr_loss
 
-                snippet_set_size = 4
+                snippet_set_size = 6
                 validation_loop_losses.append(validation_loss.item())
 
                 if i == 5:
@@ -329,7 +327,6 @@ class DistilbertTrainingParams:
             validation_loop_losses = sum(validation_loop_losses)
             print("the total validation loss for epoch " + str(epoch) +  ": " + str(validation_loop_losses))
             writer.add_scalar("loss/validation", validation_loss, epoch)
-
 
                 #if not first_iter and total_loss > self.max_loss:
                 #    print("we have exceeded the validation loss from last time, breaking from validation")
@@ -431,8 +428,8 @@ class DistilbertTrainingParams:
 
                 snippet_set_size = 6
                 training_loop_losses.append(training_loss.item())
-                print("the total loss for this iteration: " + str(training_loss))
-                print()
+                #print("the total loss for this iteration: " + str(training_loss))
+                #print()
                 training_loss.backward()
 
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
@@ -447,8 +444,9 @@ class DistilbertTrainingParams:
             training_loop_losses = sum(training_loop_losses)
             print("the total training loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
             writer.add_scalar("loss/train", training_loop_losses, epoch)
+
             #validation loop here
-            #self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
             end_time = time.perf_counter()
             print("total time it took for this epoch: " + str(end_time - start_time))
@@ -499,9 +497,9 @@ class DistilBertandBilinear(torch.nn.Module):
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        squeezed_output = torch.squeeze(output, 1)
+        model_output = torch.squeeze(output, 1)
         #print("output: " + str(squeezed_output))
-        return squeezed_output
+        return model_output
 
 
 
