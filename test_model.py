@@ -225,7 +225,7 @@ class DistilbertTrainingParams:
         self.binary_loss = torch.nn.BCELoss()
         self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
         self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
-        self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
+        self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-5)
         self.max_loss = 0
 
 
@@ -344,7 +344,6 @@ class DistilbertTrainingParams:
 
     """This function does the actual training over the personas."""
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
-
 
         writer = SummaryWriter('runs/bert_classifier')
         num_epochs = 3
