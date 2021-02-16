@@ -223,9 +223,10 @@ class DistilbertTrainingParams:
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
-        self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 2)
+        #self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 2)
+        self.lin_layer = torch.nn.Linear(distilbert_size, 2)
 
-        self.convo_classifier = DistilBertandBilinear(self.persona_model, self.bi_layer).to(self.device)
+        self.convo_classifier = DistilBertandBilinear(self.persona_model, self.lin_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
         self.max_loss = 0
 
@@ -320,7 +321,7 @@ class DistilbertTrainingParams:
                 snippet_set_size = 6
                 validation_loop_losses.append(validation_loss.item())
 
-                if i == 5:
+                if i == 10:
                     break
 
 
@@ -328,14 +329,6 @@ class DistilbertTrainingParams:
             print("the total validation loss for epoch " + str(epoch) +  ": " + str(validation_loop_losses))
             writer.add_scalar("loss/validation", validation_loss, epoch)
 
-                #if not first_iter and total_loss > self.max_loss:
-                #    print("we have exceeded the validation loss from last time, breaking from validation")
-                #    print("the loss that exceeded: " + str(total_loss))
-                #    writer.add_scalar("loss/validation", total_loss, epoch)
-                #    return True
-
-        #self.max_loss = max(self.max_loss, validation_loss)
-        #print("the max loss is saved as: " + str(self.max_loss))"""
 
 
 
@@ -350,7 +343,7 @@ class DistilbertTrainingParams:
         first_iter = True
         snippet_set_size = 6
 
-        training_size = 10
+        training_size = 20
         start_time = 0
         end_time = 0
 
@@ -428,8 +421,6 @@ class DistilbertTrainingParams:
 
                 snippet_set_size = 6
                 training_loop_losses.append(training_loss.item())
-                #print("the total loss for this iteration: " + str(training_loss))
-                #print()
                 training_loss.backward()
 
                 #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
@@ -437,7 +428,7 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 10:
+                if i == 20:
                     break
 
 
@@ -474,11 +465,11 @@ Hidden states: everything in last_hidden_states, now unpack 3-d output tensor.
         #the model treats the entire persona as one "sentence"""
 class DistilBertandBilinear(torch.nn.Module):
 
-    def __init__(self, persona_distilbert, bilinear_layer):
+    def __init__(self, persona_distilbert, linear_layer):
         super().__init__()
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.persona_distilbert = persona_distilbert
-        self.bilinear_layer = bilinear_layer
+        self.linear_layer = linear_layer
         self.distilbert_size = 768
 
 
@@ -496,9 +487,15 @@ class DistilBertandBilinear(torch.nn.Module):
         repl_persona_features = persona_features.repeat(snippet_set_len, 1)
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
-        output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
+        output = torch.mul(torch_persona_features, torch_snippet_features)
+
+        print("output: " + str(output))
+
+        output = self.linear_layer(output)
+        #maybe add multiple linear layers
+
         model_output = torch.squeeze(output, 1)
-        #print("output: " + str(squeezed_output))
+        print("model output: " + str(model_output))
         return model_output
 
 
