@@ -1,6 +1,6 @@
 import torch
 from torch.utils.tensorboard import SummaryWriter
-from sklearn.metrics import accuracy_score
+#from sklearn.metrics import accuracy_score
 import pandas as pd
 import numpy as np
 import transformers as ppb  #pytorch transformers
@@ -244,8 +244,7 @@ class DistilbertTrainingParams:
             encoded_snippets.extend([snippet_encoding])
         return encoded_snippets
 
-    def calc_loss_and_accuracy(self, model_output, labels, correct_list):
-
+    def calc_loss_and_accuracy(self, model_output, labels):
 
         curr_loss = self.binary_loss(model_output, labels)
 
@@ -253,30 +252,33 @@ class DistilbertTrainingParams:
         print("model output: " + str(model_output))
         print("rounded output: " + str(rounded_output))
 
-        prediction = rounded_output.numpy()
+        predictions = rounded_output.numpy()
+        correct_preds = 0
 
-        distractor1_pred, gold_snippet_pred = prediction[0], prediction[1]
-        if distractor1_pred == 0:
-            correct_list[0] += 1
+        for i in range(0, len(predictions)):
 
-        if gold_snippet_pred == 1:
-            correct_list[1] += 1
+            if i < len(predictions)/2:
+                #gold = 0 for distractors
+                if predictions[i] == 0:
+                    correct_preds += 1
+            else:
+                #gold = 1 for gold
+                if predictions[i] == 1:
+                    correct_preds += 1
 
-
-        return curr_loss, prediction[len(prediction) - 1]
-
+        return curr_loss, correct_preds
 
 
 
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
-        snippet_set_size = 1
+        snippet_set_size = 4
         validation_size = 10
         validation_loss = 0
         acc_avg = 0
         acc_sum = 0
-        correct_list = [0]*(snippet_set_size + 1)
+        #keep a sum list for every batch used
 
         val_file = open("positive-validation-samples.json", "r")
         val_data = json.load(val_file)
@@ -312,15 +314,17 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_validation_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_validation_dict[i - 1][0]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
+                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
 
 
-                pos_snippet_encodings = [gold_snippet_encoding[0]]
+                pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
+                gold_snippet_encoding[3], gold_snippet_encoding[4]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 1 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1]
+                gold_labels = [1, 1, 1, 1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
 
@@ -334,21 +338,16 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                curr_loss, prediction = self.calc_loss_and_accuracy(model_output, labels, correct_list)
+                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, labels)
                 validation_loss += curr_loss
-                print("correct list is now: " + str(correct_list))
-                print()
+                all_batch_sum += correct_preds
 
-                snippet_set_size = 1
+
+                snippet_set_size = 4
                 validation_loop_losses.append(validation_loss.item())
 
                 if i == 10:
                     break
-
-            acc_per_elem = [x/(validation_size + 1) for x in correct_list]
-            acc_avg = (sum(acc_per_elem)/(snippet_set_size + 1))*100
-            print("the avg validation accuracy for epoch: " + str(acc_avg))
-            print()
 
             validation_loop_losses = sum(validation_loop_losses)
             writer.add_scalar("loss/validation", validation_loss, epoch)
@@ -368,15 +367,16 @@ class DistilbertTrainingParams:
 
 
 
-    """This function does the actual training over the personas."""
+    """This function does the actual training over the personas.
+        #optimizer adjusts distilbertandbilinear model by subtracting lr*model.parameters().grad
+        #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients"""
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
         writer = SummaryWriter('runs/bert_classifier')
         num_epochs = 5
         train = True
         first_iter = True
-        snippet_set_size = 1
-        acc_avg = 0
+        snippet_set_size = 4
 
         training_size = 20
         start_time = 0
@@ -392,8 +392,7 @@ class DistilbertTrainingParams:
             self.convo_classifier.model.train()
             training_loop_losses = []
             start_time = time.perf_counter()
-            acc_sum = 0
-            correct_list = [0]*(snippet_set_size + 1)
+            all_batch_sum = 0
 
             for i in range(0, len(training_personas)):
 
@@ -407,7 +406,6 @@ class DistilbertTrainingParams:
                 print("starting training iteration: " + str(i))
 
                 if i + (snippet_set_size/2) >= training_size and i - snippet_set_size >= 0:
-                    #print("nearing the end ")
 
                     #take the preceding 4 snippets as distractors
                     for elem in range(i - snippet_set_size, i):
@@ -416,22 +414,22 @@ class DistilbertTrainingParams:
 
                 elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < training_size:
 
-                    #print("starting out ")
                     #take the proceeding 4 snippets as distractors
                     for elem in range(i + 1, i + snippet_set_size + 1):
                         #print("on distractor snippet: " + str(elem))
                         encoded_snippet_set.append(encoded_training_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_training_dict[i - 1][0]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
+                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
 
-
-                pos_snippet_encodings = [gold_snippet_encoding[0]]
+                pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
+                gold_snippet_encoding[3], gold_snippet_encoding[4]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
-                #this size of this is 6 except for last set
+                #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1]
+                gold_labels = [1, 1, 1, 1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
@@ -445,26 +443,25 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                curr_loss, prediction = self.calc_loss_and_accuracy(model_output, labels, correct_list)
+                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, labels)
                 training_loss += curr_loss
-                print("correct list is now: " + str(correct_list))
-                print()
+                all_batch_sum += correct_preds
 
-                snippet_set_size = 1
+                snippet_set_size = 4
                 training_loop_losses.append(training_loss.item())
                 training_loss.backward()
 
-                #optimizer adjusts distilbertandbilinear model by subtracting lr*model.parameters().grad
-                #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
                 if i == 20:
                     break
 
-            #element wise accuracy
-            acc_per_elem = [x/(training_size + 1) for x in correct_list]
-            acc_avg = (sum(acc_per_elem)/(snippet_set_size + 1))*100
+            #adding up correct predictions from each batch. Then adding up all batches
+            #finally, taking average of correct predictions for all samples over the entire snippet sets 
+
+            print("sum for all batches: " + str(all_batch_sum))
+            acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(training_size + 1)))*100
             print("the avg training accuracy for epoch: " + str(acc_avg))
             print()
 
@@ -472,7 +469,7 @@ class DistilbertTrainingParams:
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
-            self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            #self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
             end_time = time.perf_counter()
             #print("total time it took for this epoch: " + str(end_time - start_time))
