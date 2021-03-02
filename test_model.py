@@ -248,6 +248,8 @@ class DistilbertTrainingParams:
 
         curr_loss = self.binary_loss(model_output, labels)
 
+
+        #need to move this below tensor to cuda. the tensor ones and zeroes
         rounded_output = torch.where(model_output >= 0.5, torch.tensor(1), torch.tensor(0))
         print("model output: " + str(model_output))
         print("rounded output: " + str(rounded_output))
@@ -277,8 +279,7 @@ class DistilbertTrainingParams:
         validation_size = 10
         validation_loss = 0
         acc_avg = 0
-        acc_sum = 0
-        #keep a sum list for every batch used
+        all_batch_sum = 0
 
         val_file = open("positive-validation-samples.json", "r")
         val_data = json.load(val_file)
@@ -342,15 +343,19 @@ class DistilbertTrainingParams:
                 validation_loss += curr_loss
                 all_batch_sum += correct_preds
 
-
                 snippet_set_size = 4
                 validation_loop_losses.append(validation_loss.item())
 
                 if i == 10:
                     break
 
+            acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
+            print("the avg validation accuracy for epoch: " + str(acc_avg))
+            print()
+
+
             validation_loop_losses = sum(validation_loop_losses)
-            writer.add_scalar("loss/validation", validation_loss, epoch)
+            writer.add_scalar("loss/validation", validation_loop_losses, epoch)
             writer.add_scalar("accuracy/validation", acc_avg, epoch)
 
 
@@ -373,10 +378,11 @@ class DistilbertTrainingParams:
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 5
+        num_epochs = 1
         train = True
         first_iter = True
         snippet_set_size = 4
+        acc_avg = 0
 
         training_size = 20
         start_time = 0
@@ -384,6 +390,8 @@ class DistilbertTrainingParams:
 
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
+
+        print("validation size is: " + str(len(validation_personas)))
 
         for epoch in range(0, num_epochs):
             if epoch > 0:
@@ -420,8 +428,8 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_training_dict[elem][0])
 
                 else:
-                    encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
-                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
+                    encoded_snippet_set = [encoded_training_dict[i - 2][1], encoded_training_dict[i - 1][1],
+                    encoded_training_dict[i + 1][1], encoded_training_dict[i + 2][1]]
 
                 pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
                 gold_snippet_encoding[3], gold_snippet_encoding[4]]
@@ -458,9 +466,8 @@ class DistilbertTrainingParams:
                     break
 
             #adding up correct predictions from each batch. Then adding up all batches
-            #finally, taking average of correct predictions for all samples over the entire snippet sets 
+            #finally, taking average of correct predictions for all samples over the entire snippet sets
 
-            print("sum for all batches: " + str(all_batch_sum))
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(training_size + 1)))*100
             print("the avg training accuracy for epoch: " + str(acc_avg))
             print()
@@ -469,7 +476,7 @@ class DistilbertTrainingParams:
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
-            #self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
             end_time = time.perf_counter()
             #print("total time it took for this epoch: " + str(end_time - start_time))
