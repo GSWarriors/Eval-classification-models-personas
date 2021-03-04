@@ -217,9 +217,6 @@ class DistilbertTrainingParams:
         self.model = self.model_class.from_pretrained('./model/')
         print("model created")
 
-        #self.snippet_tokenizer = self.snippet_tokenizer_class.from_pretrained('./model')
-        #self.snippet_model = self.snippet_model_class.from_pretrained('./model')
-
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.binary_loss = torch.nn.BCELoss()
         self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
@@ -462,7 +459,7 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 20:
+                if i == 5:
                     break
 
             #adding up correct predictions from each batch. Then adding up all batches
@@ -476,7 +473,7 @@ class DistilbertTrainingParams:
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
-            self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            #self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
             end_time = time.perf_counter()
             #print("total time it took for this epoch: " + str(end_time - start_time))
@@ -528,7 +525,8 @@ class DistilBertandBilinear(torch.nn.Module):
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        #print("bilinear output: " + str(output))
+        print("bilinear output: " + str(output))
+        print("shape:" + str(output.shape))
 
         squeezed_output = torch.squeeze(output, 1)
         model_output = sigmoid(squeezed_output)
