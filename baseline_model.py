@@ -246,40 +246,39 @@ class DistilbertTrainingParams:
 
 
     def calc_loss_and_accuracy(self, model_output, softmax_output, labels):
+        #calculates loss and accuracy of softmax output and thresholds labels in 8x2 array
 
         curr_loss = self.cross_entropy_loss(model_output, labels)
-        print("curr loss: " + str(curr_loss))
-
-        #need to move this below tensor to cuda. the tensor ones and zeroes
         rounded_output = torch.where(softmax_output >= 0.5, torch.tensor(1), torch.tensor(0))
-        print("softmax output: " + str(softmax_output))
-        print("rounded output: " + str(rounded_output))
-        print()
+        #print("softmax output: " + str(softmax_output))
+        #print("rounded output (softmax): " + str(rounded_output))
 
-        """predictions = rounded_output.numpy()
+        predictions = rounded_output.numpy()
         correct_preds = 0
 
         for i in range(0, len(predictions)):
+            curr_elem = predictions[i]
 
             if i < len(predictions)/2:
-                #gold = 0 for distractors
-                if predictions[i] == 0:
+                if curr_elem[0] == 1:
                     correct_preds += 1
             else:
-                #gold = 1 for gold
-                if predictions[i] == 1:
+                if curr_elem[1] == 1:
                     correct_preds += 1
 
-        return curr_loss, correct_preds"""
+        return curr_loss, correct_preds
+
 
 
 
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
-        snippet_set_size = 6
+        snippet_set_size = 4
         validation_size = 10
         validation_loss = 0
+        acc_avg = 0
+        all_batch_sum = 0
 
         val_file = open("positive-validation-samples.json", "r")
         val_data = json.load(val_file)
@@ -304,20 +303,22 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_validation_dict[elem][1])
 
                 elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < validation_size:
-                    #take the proceeding 6 snippets as distractors
+                    #take the proceeding 4 snippets as distractors
                     for elem in range(i + 1, i + snippet_set_size + 1):
                         encoded_snippet_set.append(encoded_validation_dict[elem][1])
                 else:
-                    encoded_snippet_set = [encoded_validation_dict[i - 3][1], encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
-                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1], encoded_validation_dict[i + 3][1]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
+                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
 
 
-                pos_snippet_encodings = [gold_snippet_encoding[1]]
+                pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
+                gold_snippet_encoding[3], gold_snippet_encoding[4]]
+
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
-                #this size of this is 6 except for last set
+                #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1]
+                gold_labels = [1, 1, 1, 1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=self.device)
 
@@ -329,22 +330,26 @@ class DistilbertTrainingParams:
 
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
-                model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+                softmax_output, model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                curr_loss = self.cross_entropy_loss(model_output, labels)
+                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, softmax_output, labels)
                 validation_loss += curr_loss
+                all_batch_sum += correct_preds
 
-                snippet_set_size = 6
+                snippet_set_size = 4
                 validation_loop_losses.append(validation_loss.item())
 
                 if i == 10:
                     break
 
 
+            acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
+            print("the avg validation accuracy for epoch: " + str(acc_avg))
             validation_loop_losses = sum(validation_loop_losses)
             print("the total validation loss for epoch " + str(epoch) +  ": " + str(validation_loop_losses))
-            writer.add_scalar("loss/validation", validation_loss, epoch)
-
+            print()
+            writer.add_scalar("loss/validation", validation_loop_losses, epoch)
+            writer.add_scalar("accuracy/validation", acc_avg, epoch)
 
 
 
@@ -353,9 +358,12 @@ class DistilbertTrainingParams:
     """This function does the actual training over the personas."""
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
-        #change the number of snippets?
+
+        #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
+        #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
+
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 1
+        num_epochs = 5
         train = True
         first_iter = True
         snippet_set_size = 4
@@ -372,10 +380,8 @@ class DistilbertTrainingParams:
                 first_iter = False
 
             self.convo_classifier.model.train()
-
             training_loop_losses = []
             all_batch_sum = 0
-
             start_time = time.perf_counter()
 
             for i in range(0, len(training_personas)):
@@ -426,9 +432,7 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 softmax_output, model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                self.calc_loss_and_accuracy(model_output, softmax_output, labels)
-                break
-
+                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, softmax_output, labels)
                 training_loss += curr_loss
                 all_batch_sum += correct_preds
 
@@ -436,29 +440,26 @@ class DistilbertTrainingParams:
                 training_loop_losses.append(training_loss.item())
                 training_loss.backward()
 
-                #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
-                #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 5:
+                if i == 20:
                     break
 
-
+            acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(training_size + 1)))*100
+            print("the avg training accuracy for epoch: " + str(acc_avg))
             training_loop_losses = sum(training_loop_losses)
             print("the total training loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
+            print()
             writer.add_scalar("loss/train", training_loop_losses, epoch)
+            writer.add_scalar("accuracy/train", acc_avg, epoch)
 
             #validation loop here
-            #self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
-
+            self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
             end_time = time.perf_counter()
-            print("total time it took for this epoch: " + str(end_time - start_time))
-            print()
 
         writer.flush()
         writer.close()
-
 
         #save the model
         #torch.save(self.convo_classifier.state_dict(), 'mysavedmodels/model.pt')"""
@@ -501,11 +502,10 @@ class DistilBertandBilinear(torch.nn.Module):
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
         output = torch.mul(torch_persona_features, torch_snippet_features)
-        #maybe add multiple linear layers
         output = self.linear_layer(output)
+
         m = torch.nn.Softmax()
         softmax_output = m(output)
-        print("softmax output: " + str(softmax_output))
 
         model_output = torch.squeeze(output, 1)
         return softmax_output, model_output

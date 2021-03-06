@@ -272,6 +272,8 @@ class DistilbertTrainingParams:
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
+        #change validation beginning snippets to 1
+        
         snippet_set_size = 4
         validation_size = 10
         validation_loss = 0
