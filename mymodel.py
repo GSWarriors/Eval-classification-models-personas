@@ -212,7 +212,6 @@ class DistilbertTrainingParams:
         distilbert_size = 768
 
         self.model_class, self.tokenizer_class, self.pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
-        #self.snippet_model_class, self.snippet_tokenizer_class, self.snippet_pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
         self.tokenizer = self.tokenizer_class.from_pretrained('./model/')
         self.model = self.model_class.from_pretrained('./model/')
         print("model created")
@@ -245,11 +244,10 @@ class DistilbertTrainingParams:
 
         curr_loss = self.binary_loss(model_output, labels)
 
-
         #need to move this below tensor to cuda. the tensor ones and zeroes
         rounded_output = torch.where(model_output >= 0.5, torch.tensor(1), torch.tensor(0))
-        print("model output: " + str(model_output))
-        print("rounded output: " + str(rounded_output))
+        #print("model output: " + str(model_output))
+        #print("rounded output: " + str(rounded_output))
 
         predictions = rounded_output.numpy()
         correct_preds = 0
@@ -272,8 +270,6 @@ class DistilbertTrainingParams:
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
-        #change validation beginning snippets to 1
-        
         snippet_set_size = 4
         validation_size = 10
         validation_loss = 0
@@ -352,32 +348,35 @@ class DistilbertTrainingParams:
             print("the avg validation accuracy for epoch: " + str(acc_avg))
             print()
 
-
             validation_loop_losses = sum(validation_loop_losses)
+            if not first_iter and validation_loop_losses > self.max_loss:
+                print("we have exceeded the validation loss from last time, breaking from validation")
+                print("the loss that exceeded: " + str(validation_loop_losses))
+                return True
+
+
+            self.max_loss = max(self.max_loss, validation_loop_losses)
+            print("current loss is: " + str(validation_loop_losses))
+            print("the max loss is saved as: " + str(self.max_loss))
+
+
             writer.add_scalar("loss/validation", validation_loop_losses, epoch)
             writer.add_scalar("accuracy/validation", acc_avg, epoch)
 
-
-                #if not first_iter and total_loss > self.max_loss:
-                #    print("we have exceeded the validation loss from last time, breaking from validation")
-                #    print("the loss that exceeded: " + str(total_loss))
-                #    writer.add_scalar("loss/validation", total_loss, epoch)
-                #    return True
-
-        #self.max_loss = max(self.max_loss, validation_loss)
-        #print("the max loss is saved as: " + str(self.max_loss))
 
 
 
 
 
     """This function does the actual training over the personas.
-        #optimizer adjusts distilbertandbilinear model by subtracting lr*model.parameters().grad
-        #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients"""
+    optimizer adjusts distilbertandbilinear model by subtracting lr*model.parameters().grad
+    and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients"""
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
+        #run model on test set after training longer.
+
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 1
+        num_epochs = 5
         train = True
         first_iter = True
         snippet_set_size = 4
@@ -389,8 +388,6 @@ class DistilbertTrainingParams:
 
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
-
-        print("validation size is: " + str(len(validation_personas)))
 
         for epoch in range(0, num_epochs):
             if epoch > 0:
@@ -461,7 +458,7 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 5:
+                if i == 20:
                     break
 
             #adding up correct predictions from each batch. Then adding up all batches
@@ -475,25 +472,21 @@ class DistilbertTrainingParams:
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
-            #self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            if exceeded_loss:
+                break
 
             end_time = time.perf_counter()
-            #print("total time it took for this epoch: " + str(end_time - start_time))
-            #print()
+
 
         writer.flush()
         writer.close()
         #save the model
-        #torch.save(self.convo_classifier.state_dict(), 'mysavedmodels/model.pt')
+        torch.save(self.convo_classifier.state_dict(), 'savedmodels/model.pt')
 
 
-
-        """
-        #print("moving to validation:")
-
-        #self.validate_model(validation_personas, encoded_val_snippets, epoch, first_iter, writer)
-        #if exceeded_loss:
-        #    break"""
+        #print("total time it took for this epoch: " + str(end_time - start_time))
+        #print()
 
 
 
@@ -527,8 +520,6 @@ class DistilBertandBilinear(torch.nn.Module):
         torch_persona_features = repl_persona_features.clone().detach().requires_grad_(True)
 
         output = self.bilinear_layer(torch_persona_features, torch_snippet_features)
-        print("bilinear output: " + str(output))
-        print("shape:" + str(output.shape))
 
         squeezed_output = torch.squeeze(output, 1)
         model_output = sigmoid(squeezed_output)
@@ -650,8 +641,8 @@ def filter_for_responses(response):
 
 #can edit this to valid.txt and test.txt in order to run on different files
 
-train_dataframe = pd.read_csv("train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("data/valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
 
 
 
