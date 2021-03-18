@@ -1,10 +1,8 @@
 import torch
 from torch.utils.tensorboard import SummaryWriter
-#from sklearn.metrics import accuracy_score
 import pandas as pd
 import numpy as np
 import transformers as ppb  #pytorch transformers
-#from transformers import BertTokenizer, BertForNextSentencePrediction
 import random as rand
 import time
 import math
@@ -37,10 +35,10 @@ def main(train_df, valid_df):
 
     train_persona_dict, train_snippet_dict = create_training_file(training_personas, training_snippets)
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
+    epoch = 0
 
-
-    #consider removing training snippets and validation snippets if possible
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict)
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
+    print("running main")
 
 
 
@@ -64,11 +62,6 @@ def create_encoding_dict(init_params, snippets):
 
         encoded_gold_snippets = init_params.encode_snippets(partitioned_gold_snippet)
         encoded_dict[i] = encoded_gold_snippets
-
-        #if i == 0:
-        #    print("encoding snippet 0")
-        #    print("the snippets: " + str(snippets[0]))
-        #    print("encoded dict at 0: " + str(encoded_dict[0]))
 
 
     smallest_convo_size = 10
@@ -221,7 +214,7 @@ class DistilbertTrainingParams:
         self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 1)
         self.convo_classifier = DistilBertandBilinear(self.model, self.bi_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
-        self.max_loss = 0
+        self.prev_loss = 0
 
 
     def create_tokens_dict(self):
@@ -299,7 +292,7 @@ class DistilbertTrainingParams:
                     #take the preceding 4 snippets as distractors
                     for elem in range(i - snippet_set_size, i):
                         #print("on distractor snippet: " + str(elem))
-                        encoded_snippet_set.append(encoded_validation_dict[elem][0])
+                        encoded_snippet_set.append(encoded_validation_dict[elem][1])
 
                 elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < validation_size:
 
@@ -307,12 +300,11 @@ class DistilbertTrainingParams:
                     #take the proceeding 4 snippets as distractors
                     for elem in range(i + 1, i + snippet_set_size + 1):
                         #print("on distractor snippet: " + str(elem))
-                        encoded_snippet_set.append(encoded_validation_dict[elem][0])
+                        encoded_snippet_set.append(encoded_validation_dict[elem][1])
 
                 else:
                     encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
                     encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
-
 
                 pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
                 gold_snippet_encoding[3], gold_snippet_encoding[4]]
@@ -347,18 +339,17 @@ class DistilbertTrainingParams:
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
             print("the avg validation accuracy for epoch: " + str(acc_avg))
             print()
-
             validation_loop_losses = sum(validation_loop_losses)
-            if not first_iter and validation_loop_losses > self.max_loss:
+
+
+            if not first_iter and validation_loop_losses > self.prev_loss:
                 print("we have exceeded the validation loss from last time, breaking from validation")
                 print("the loss that exceeded: " + str(validation_loop_losses))
                 return True
 
-
-            self.max_loss = max(self.max_loss, validation_loop_losses)
+            self.prev_loss = validation_loop_losses
             print("current loss is: " + str(validation_loop_losses))
-            print("the max loss is saved as: " + str(self.max_loss))
-
+            print("the prev loss is saved as: " + str(self.prev_loss))
 
             writer.add_scalar("loss/validation", validation_loop_losses, epoch)
             writer.add_scalar("accuracy/validation", acc_avg, epoch)
@@ -371,12 +362,11 @@ class DistilbertTrainingParams:
     """This function does the actual training over the personas.
     optimizer adjusts distilbertandbilinear model by subtracting lr*model.parameters().grad
     and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients"""
-    def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
+    def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch):
 
         #run model on test set after training longer.
 
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 5
         train = True
         first_iter = True
         snippet_set_size = 4
@@ -385,17 +375,17 @@ class DistilbertTrainingParams:
         training_size = 20
         start_time = 0
         end_time = 0
-
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
 
-        for epoch in range(0, num_epochs):
+        exceeded_loss = False
+
+        while not exceeded_loss:
             if epoch > 0:
                 first_iter = False
 
             self.convo_classifier.model.train()
             training_loop_losses = []
-            start_time = time.perf_counter()
             all_batch_sum = 0
 
             for i in range(0, len(training_personas)):
@@ -414,14 +404,14 @@ class DistilbertTrainingParams:
                     #take the preceding 4 snippets as distractors
                     for elem in range(i - snippet_set_size, i):
                         #print("on distractor snippet: " + str(elem))
-                        encoded_snippet_set.append(encoded_training_dict[elem][0])
+                        encoded_snippet_set.append(encoded_training_dict[elem][1])
 
                 elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < training_size:
 
                     #take the proceeding 4 snippets as distractors
                     for elem in range(i + 1, i + snippet_set_size + 1):
                         #print("on distractor snippet: " + str(elem))
-                        encoded_snippet_set.append(encoded_training_dict[elem][0])
+                        encoded_snippet_set.append(encoded_training_dict[elem][1])
 
                 else:
                     encoded_snippet_set = [encoded_training_dict[i - 2][1], encoded_training_dict[i - 1][1],
@@ -463,7 +453,6 @@ class DistilbertTrainingParams:
 
             #adding up correct predictions from each batch. Then adding up all batches
             #finally, taking average of correct predictions for all samples over the entire snippet sets
-
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(training_size + 1)))*100
             print("the avg training accuracy for epoch: " + str(acc_avg))
             print()
@@ -473,20 +462,35 @@ class DistilbertTrainingParams:
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
             exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
-            if exceeded_loss:
+
+            """if epoch % 10 == 0:
+                torch.save(
+                    {'epoch': epoch,
+                    'model_state_dict': self.convo_classifier.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'prev_loss': self.prev_loss
+                    }, 'savedmodels/resumemodel.pt')
+                print("checkpointing model on epoch: " + str(epoch))"""
+
+            if epoch == 10:
                 break
 
-            end_time = time.perf_counter()
 
+            epoch += 1
 
         writer.flush()
         writer.close()
-        #save the model
-        torch.save(self.convo_classifier.state_dict(), 'savedmodels/model.pt')
+
+        torch.save(
+            {'epoch': epoch,
+            'model_state_dict': self.convo_classifier.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'prev_loss': self.prev_loss
+            }, 'savedmodels/finalmodel.pt')
 
 
-        #print("total time it took for this epoch: " + str(end_time - start_time))
-        #print()
+
+#note: take model that I have on remote and replace here
 
 
 

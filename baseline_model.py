@@ -358,10 +358,8 @@ class DistilbertTrainingParams:
     """This function does the actual training over the personas."""
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
 
-
         #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
         #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
-
         writer = SummaryWriter('runs/bert_classifier')
         num_epochs = 5
         train = True
@@ -622,8 +620,8 @@ def filter_for_responses(response):
 
 #can edit this to valid.txt and test.txt in order to run on different files
 
-train_dataframe = pd.read_csv("train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("data/valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
 
 
 
