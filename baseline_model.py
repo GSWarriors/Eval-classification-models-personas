@@ -37,10 +37,10 @@ def main(train_df, valid_df):
 
     train_persona_dict, train_snippet_dict = create_training_file(training_personas, training_snippets)
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
-
+    epoch = 0
 
     #consider removing training snippets and validation snippets if possible
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict)
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
 
 
 
@@ -225,7 +225,7 @@ class DistilbertTrainingParams:
 
         self.convo_classifier = DistilBertandBilinear(self.model, self.lin_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
-        self.max_loss = 0
+        self.prev_loss = 0
 
 
     def create_tokens_dict(self):
@@ -250,8 +250,6 @@ class DistilbertTrainingParams:
 
         curr_loss = self.cross_entropy_loss(model_output, labels)
         rounded_output = torch.where(softmax_output >= 0.5, torch.tensor(1), torch.tensor(0))
-        #print("softmax output: " + str(softmax_output))
-        #print("rounded output (softmax): " + str(rounded_output))
 
         predictions = rounded_output.numpy()
         correct_preds = 0
@@ -346,8 +344,18 @@ class DistilbertTrainingParams:
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
             print("the avg validation accuracy for epoch: " + str(acc_avg))
             validation_loop_losses = sum(validation_loop_losses)
-            print("the total validation loss for epoch " + str(epoch) +  ": " + str(validation_loop_losses))
+
+            if not first_iter and validation_loop_losses > self.prev_loss:
+                print("we have exceeded the validation loss from last time, breaking from validation")
+                print("the loss that exceeded: " + str(validation_loop_losses))
+                return True
+
+            print("the prev loss is saved as: " + str(self.prev_loss))
+            print("current loss is: " + str(validation_loop_losses))
             print()
+
+            self.prev_loss = validation_loop_losses
+
             writer.add_scalar("loss/validation", validation_loop_losses, epoch)
             writer.add_scalar("accuracy/validation", acc_avg, epoch)
 
@@ -356,12 +364,11 @@ class DistilbertTrainingParams:
 
 
     """This function does the actual training over the personas."""
-    def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict):
+    def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch):
 
         #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
         #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
         writer = SummaryWriter('runs/bert_classifier')
-        num_epochs = 5
         train = True
         first_iter = True
         snippet_set_size = 4
@@ -372,15 +379,15 @@ class DistilbertTrainingParams:
 
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
+        exceeded_loss = False
 
-        for epoch in range(0, num_epochs):
+        while not exceeded_loss:
             if epoch > 0:
                 first_iter = False
 
             self.convo_classifier.model.train()
             training_loop_losses = []
             all_batch_sum = 0
-            start_time = time.perf_counter()
 
             for i in range(0, len(training_personas)):
 
@@ -446,27 +453,32 @@ class DistilbertTrainingParams:
 
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(training_size + 1)))*100
             print("the avg training accuracy for epoch: " + str(acc_avg))
-            training_loop_losses = sum(training_loop_losses)
-            print("the total training loss for epoch " + str(epoch) +  ": " + str(training_loop_losses))
             print()
+            training_loop_losses = sum(training_loop_losses)
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
 
             #validation loop here
-            self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
-            end_time = time.perf_counter()
+            exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+
+            """if epoch % 10 == 0:
+                torch.save(
+                    {'epoch': epoch,
+                    'model_state_dict': self.convo_classifier.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'prev_loss': self.prev_loss
+                    }, 'savedmodels/baselineresumemodel.pt')
+                print("checkpointing model on epoch: " + str(epoch))"""
+
+            if epoch == 10:
+                break
+
+            epoch += 1
 
         writer.flush()
         writer.close()
-
         #save the model
-        #torch.save(self.convo_classifier.state_dict(), 'mysavedmodels/model.pt')"""
-
-
-        """
-        #print("moving to validation:")
-        #if exceeded_loss:
-        #    break"""
+        torch.save(self.convo_classifier.state_dict(), 'savedmodels/baselinemodel.pt')
 
 
 

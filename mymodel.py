@@ -10,6 +10,8 @@ import itertools
 import json
 
 
+
+
 """
 Main separates dataset:
 1. into personas and snippets
@@ -24,7 +26,7 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
     init_params = DistilbertTrainingParams()
@@ -37,7 +39,7 @@ def main(train_df, valid_df):
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
     epoch = 0
 
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
     print("running main")
 
 
@@ -239,8 +241,8 @@ class DistilbertTrainingParams:
 
         #need to move this below tensor to cuda. the tensor ones and zeroes
         rounded_output = torch.where(model_output >= 0.5, torch.tensor(1), torch.tensor(0))
-        #print("model output: " + str(model_output))
-        #print("rounded output: " + str(rounded_output))
+        print("model output: " + str(model_output))
+        print("rounded output: " + str(rounded_output))
 
         predictions = rounded_output.numpy()
         correct_preds = 0
@@ -472,7 +474,7 @@ class DistilbertTrainingParams:
                     }, 'savedmodels/resumemodel.pt')
                 print("checkpointing model on epoch: " + str(epoch))"""
 
-            if epoch == 10:
+            if epoch == 5:
                 break
 
 
@@ -481,12 +483,7 @@ class DistilbertTrainingParams:
         writer.flush()
         writer.close()
 
-        torch.save(
-            {'epoch': epoch,
-            'model_state_dict': self.convo_classifier.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'prev_loss': self.prev_loss
-            }, 'savedmodels/finalmodel.pt')
+        torch.save(self.convo_classifier.state_dict(), 'savedmodels/practicemodel.pt')
 
 
 
