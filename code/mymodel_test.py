@@ -233,9 +233,12 @@ def resume_training(train_df, valid_df, training_params, epoch):
 
 
 
-train_dataframe = pd.read_csv("data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("data/valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
-test_dataframe = pd.read_csv("data/test_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/train_other_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/valid_other_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
+test_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/test_other_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
 
 
 

@@ -26,7 +26,7 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
     init_params = DistilbertTrainingParams()
@@ -39,8 +39,8 @@ def main(train_df, valid_df):
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
     epoch = 0
 
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
-    print("running main")
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
+    #print("running main")
 
 
 
@@ -238,7 +238,6 @@ class DistilbertTrainingParams:
     def calc_loss_and_accuracy(self, model_output, labels):
 
         curr_loss = self.binary_loss(model_output, labels)
-
         #need to move this below tensor to cuda. the tensor ones and zeroes
         rounded_output = torch.where(model_output >= 0.5, torch.tensor(1), torch.tensor(0))
         print("model output: " + str(model_output))
@@ -265,7 +264,7 @@ class DistilbertTrainingParams:
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
-        snippet_set_size = 4
+        snippet_set_size = 6
         validation_size = 10
         validation_loss = 0
         acc_avg = 0
@@ -305,16 +304,16 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_validation_dict[elem][1])
 
                 else:
-                    encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
-                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 3][1], encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
+                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1], encoded_validation_dict[i + 3][1]]
 
-                pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
-                gold_snippet_encoding[3], gold_snippet_encoding[4]]
+                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1], gold_snippet_encoding[2],
+                gold_snippet_encoding[3], gold_snippet_encoding[4], gold_snippet_encoding[5]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 1 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1]
+                gold_labels = [1, 1, 1, 1, 1, 1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
 
@@ -332,7 +331,7 @@ class DistilbertTrainingParams:
                 validation_loss += curr_loss
                 all_batch_sum += correct_preds
 
-                snippet_set_size = 4
+                snippet_set_size = 6
                 validation_loop_losses.append(validation_loss.item())
 
                 if i == 10:
@@ -368,10 +367,10 @@ class DistilbertTrainingParams:
 
         #run model on test set after training longer.
 
-        writer = SummaryWriter('runs/bert_classifier')
+        writer = SummaryWriter('/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/runs/bert_classifier')
         train = True
         first_iter = True
-        snippet_set_size = 4
+        snippet_set_size = 6
         acc_avg = 0
 
         training_size = 20
@@ -416,16 +415,16 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_training_dict[elem][1])
 
                 else:
-                    encoded_snippet_set = [encoded_training_dict[i - 2][1], encoded_training_dict[i - 1][1],
-                    encoded_training_dict[i + 1][1], encoded_training_dict[i + 2][1]]
+                    encoded_snippet_set = [encoded_training_dict[i - 3][1], encoded_training_dict[i - 2][1], encoded_training_dict[i - 1][1],
+                    encoded_training_dict[i + 1][1], encoded_training_dict[i + 2][1], encoded_training_dict[i + 3][1]]
 
-                pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
-                gold_snippet_encoding[3], gold_snippet_encoding[4]]
+                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1], gold_snippet_encoding[2],
+                gold_snippet_encoding[3], gold_snippet_encoding[4], gold_snippet_encoding[5]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1]
+                gold_labels = [1, 1, 1, 1, 1, 1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
@@ -443,14 +442,14 @@ class DistilbertTrainingParams:
                 training_loss += curr_loss
                 all_batch_sum += correct_preds
 
-                snippet_set_size = 4
+                snippet_set_size = 6
                 training_loop_losses.append(training_loss.item())
                 training_loss.backward()
 
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 20:
+                if i == 10:
                     break
 
             #adding up correct predictions from each batch. Then adding up all batches
@@ -483,11 +482,10 @@ class DistilbertTrainingParams:
         writer.flush()
         writer.close()
 
-        torch.save(self.convo_classifier.state_dict(), 'savedmodels/practicemodel.pt')
+        torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
 
 
 
-#note: take model that I have on remote and replace here
 
 
 
@@ -642,8 +640,10 @@ def filter_for_responses(response):
 
 #can edit this to valid.txt and test.txt in order to run on different files
 
-train_dataframe = pd.read_csv("data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("data/valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/train_other_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/valid_other_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
 
 
 

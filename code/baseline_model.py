@@ -368,7 +368,7 @@ class DistilbertTrainingParams:
 
         #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
         #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
-        writer = SummaryWriter('runs/bert_classifier')
+        writer = SummaryWriter('/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/runs/bert_classifier')
         train = True
         first_iter = True
         snippet_set_size = 4
@@ -632,8 +632,10 @@ def filter_for_responses(response):
 
 #can edit this to valid.txt and test.txt in order to run on different files
 
-train_dataframe = pd.read_csv("data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("data/valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/train_other_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/valid_other_original.txt",
+delimiter='\n', header= None, error_bad_lines=False)
 
 
 
