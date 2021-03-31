@@ -26,7 +26,7 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
     init_params = DistilbertTrainingParams()
@@ -39,8 +39,8 @@ def main(train_df, valid_df):
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
     epoch = 0
 
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
-    #print("running main")
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
+    print("running main")
 
 
 
@@ -240,8 +240,8 @@ class DistilbertTrainingParams:
         curr_loss = self.binary_loss(model_output, labels)
         #need to move this below tensor to cuda. the tensor ones and zeroes
         rounded_output = torch.where(model_output >= 0.5, torch.tensor(1), torch.tensor(0))
-        print("model output: " + str(model_output))
-        print("rounded output: " + str(rounded_output))
+        #print("model output: " + str(model_output))
+        #print("rounded output: " + str(rounded_output))
 
         predictions = rounded_output.numpy()
         correct_preds = 0
@@ -257,7 +257,9 @@ class DistilbertTrainingParams:
                 if predictions[i] == 1:
                     correct_preds += 1
 
-        return curr_loss, correct_preds
+        predictions = list(predictions)
+
+        return curr_loss, correct_preds, predictions
 
 
 
@@ -438,7 +440,7 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, labels)
+                curr_loss, correct_preds, predictions = self.calc_loss_and_accuracy(model_output, labels)
                 training_loss += curr_loss
                 all_batch_sum += correct_preds
 

@@ -3,12 +3,16 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 import pandas as pd
 import numpy as np
+from sklearn.metrics import precision_recall_curve
 import transformers as ppb  #pytorch transformers
 import random as rand
 import time
 import math
 import itertools
 import json
+from matplotlib import pyplot
+
+
 from mymodel import DistilbertTrainingParams
 from mymodel import DistilBertandBilinear
 from mymodel import create_persona_and_snippet_lists
@@ -16,7 +20,6 @@ from mymodel import create_encoding_dict
 from mymodel import create_training_file
 from mymodel import create_validation_file
 from mymodel import add_padding_and_mask
-
 
 
 """from baseline_model import DistilbertTrainingParams
@@ -34,12 +37,9 @@ from baseline_model import add_padding_and_mask"""
 #end - start to calc time
 
 
-
 def main(train_df, valid_df, test_df):
 
-    """
-    this code is only for resuming training, not testing
-
+    """#this code is only for resuming training, not testing
     training_params = DistilbertTrainingParams()
     training_params.create_tokens_dict()
 
@@ -49,7 +49,7 @@ def main(train_df, valid_df, test_df):
     epoch = 0
     prev_loss = 0
 
-    checkpoint = torch.load('savedmodels/finalmodel.pt')
+    checkpoint = torch.load('savedmodels/resumemodel.pt')
     saved_model.load_state_dict(checkpoint['model_state_dict'])
     saved_optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     epoch = checkpoint['epoch']
@@ -61,7 +61,7 @@ def main(train_df, valid_df, test_df):
     print("the prev loss saved was: " + str(prev_loss))
     print()
 
-    resume_training(train_df, valid_df, training_params, epoch)"""
+    resume_training(train_df, valid_df, training_params, epoch, prev_loss)"""
 
 
 
@@ -72,7 +72,14 @@ def main(train_df, valid_df, test_df):
     print("model parameters initialized, and tokens dict created")
     saved_model = training_params.convo_classifier
     saved_optimizer = training_params.optimizer
-    saved_model.load_state_dict(torch.load('savedmodels/practicemodel.pt'))
+
+    #mymodel implementation
+    saved_model.load_state_dict(torch.load('/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/finalmodel.pt', map_location=torch.device('cpu')))
+
+    #baseline implementation below
+    #checkpoint = torch.load('savedmodels/resumemodel.pt')
+    #saved_model.load_state_dict(checkpoint['model_state_dict'])
+    #epoch = checkpoint['epoch']
 
     test_personas, test_snippets = create_persona_and_snippet_lists(test_df)
     encoded_test_dict, smallest_convo_size = create_encoding_dict(training_params, test_snippets)
@@ -80,6 +87,7 @@ def main(train_df, valid_df, test_df):
     create_testing_file(test_personas, test_snippets)
     print("created test file")
     print("smallest convo size: " + str(smallest_convo_size))
+    #print("last epoch: " + str(epoch))
 
     #test below- maybe changed saved model back to training params
     test_model(test_personas, encoded_test_dict, saved_model, training_params)
@@ -88,14 +96,16 @@ def main(train_df, valid_df, test_df):
 
 def test_model(test_personas, encoded_test_dict, saved_model, training_params):
 
-    #try with training params, then try with saved model
-
     #writer = SummaryWriter('runs/bert_classifier')
     snippet_set_size = 4
     test_size = len(test_personas)
     test_loss = 0
     acc_avg = 0
     all_batch_sum = 0
+
+    actual_output = ([0]*snippet_set_size + [1]*snippet_set_size)*test_size
+    output = []
+    predicted_output = []
 
     test_file = open("positive-test-samples.json", "r")
     test_data = json.load(test_file)
@@ -141,7 +151,12 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
             labels_list = [0]*snippet_set_size
             gold_labels = [1, 1, 1, 1]
             labels_list = labels_list + gold_labels
+
+            #mymodel labels
             labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=training_params.device)
+
+            #baseline model labels
+            #labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=training_params.device)
 
             padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
             snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(training_params.device)
@@ -151,33 +166,77 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
 
             snippet_set_features = snippet_hidden_states[0][:, 0, :].to(training_params.device)
             torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
-            model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-            curr_loss, correct_preds = training_params.calc_loss_and_accuracy(model_output, labels)
+            #my model forward and loss and accuracy
+            model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+            curr_loss, correct_preds, predictions = training_params.calc_loss_and_accuracy(model_output, labels)
+            output += model_output
+            predicted_output += predictions
+
+            #baseline loss and accuracy
+            #softmax_output, model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+            #curr_loss, correct_preds, rounded_output = training_params.calc_loss_and_accuracy(model_output, softmax_output, labels)
+
             test_loss += curr_loss
             all_batch_sum += correct_preds
 
             snippet_set_size = 4
             test_loop_losses.append(test_loss.item())
 
-            if i == 20:
+            if i == 10:
                 break
+
 
         acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(test_size + 1)))*100
         print("the avg test accuracy for epoch: " + str(acc_avg))
         print()
         test_loop_losses = sum(test_loop_losses)
         print("total test loss: " + str(test_loop_losses))
-
         #writer.add_scalar("loss/test", test_loop_losses, epoch)
         #writer.add_scalar("accuracy/test", acc_avg, epoch)
 
-        #writer.flush()
-        #writer.close()
+    for j in range(0, len(output)):
+        output[j] = output[j].item()
+
+
+    calculate_prc_and_f1(actual_output, predicted_output, output)
 
 
 
 
+def calculate_prc_and_f1(actual_output, predicted_output, output):
+
+    #Note: predicted output is the model output rounded, output is the model output
+    #not rounded. actual output is the test set output
+
+    #note, need to keep probablilities for positive outcome only
+
+    print("actual output: " + str(actual_output))
+    print()
+    print("output: " + str(output))
+    print()
+    print("predicted output: " + str(predicted_output))
+
+    """np_actual_output = np.asarray(actual_output)
+    np_output = np.asarray(output)
+
+
+    precision, recall, thresholds = precision_recall_curve(np_actual_output, np_output)
+    #f1_score = f1_score(np_actual_output, np_predicted_output)
+    #print("f1 score: " + str(f1_score))
+
+    # plot the precision-recall curves
+    no_skill = len(np_actual_output[np_actual_output==1]) / len(np_actual_output)
+    pyplot.plot([0, 1], [no_skill, no_skill], linestyle='--', label='No Skill')
+    pyplot.plot(recall, precision, marker='.', label='Bilinear + sigmoid')
+
+    # axis labels
+    pyplot.xlabel('Recall')
+    pyplot.ylabel('Precision')
+    # show the legend
+    pyplot.legend()
+    # show the plot
+    pyplot.show()"""
 
 
 
@@ -213,7 +272,7 @@ def create_testing_file(test_personas, test_snippets):
 
 
 
-def resume_training(train_df, valid_df, training_params, epoch):
+def resume_training(train_df, valid_df, training_params, epoch, prev_loss):
     #start from next epoch
     epoch = epoch + 1
 
@@ -233,12 +292,9 @@ def resume_training(train_df, valid_df, training_params, epoch):
 
 
 
-train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/train_other_original.txt",
-delimiter='\n', header= None, error_bad_lines=False)
-validation_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/valid_other_original.txt",
-delimiter='\n', header= None, error_bad_lines=False)
-test_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/test_other_original.txt",
-delimiter='\n', header= None, error_bad_lines=False)
+train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
+validation_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/valid_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
+test_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/test_other_original.txt", delimiter='\n', header= None, error_bad_lines=False)
 
 
 
