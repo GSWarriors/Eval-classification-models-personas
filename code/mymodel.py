@@ -26,7 +26,7 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
     init_params = DistilbertTrainingParams()
@@ -39,8 +39,8 @@ def main(train_df, valid_df):
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
     epoch = 0
 
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
-    print("running main")
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
+    #print("running main")
 
 
 
@@ -329,14 +329,14 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, labels)
+                curr_loss, correct_preds, predictions = self.calc_loss_and_accuracy(model_output, labels)
                 validation_loss += curr_loss
                 all_batch_sum += correct_preds
 
                 snippet_set_size = 6
                 validation_loop_losses.append(validation_loss.item())
 
-                if i == 10:
+                if i == 5:
                     break
 
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
@@ -439,6 +439,7 @@ class DistilbertTrainingParams:
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+                print("model output (without threshold): " + str(model_output))
 
                 curr_loss, correct_preds, predictions = self.calc_loss_and_accuracy(model_output, labels)
                 training_loss += curr_loss
@@ -475,7 +476,7 @@ class DistilbertTrainingParams:
                     }, 'savedmodels/resumemodel.pt')
                 print("checkpointing model on epoch: " + str(epoch))"""
 
-            if epoch == 5:
+            if epoch == 1:
                 break
 
 
@@ -484,7 +485,7 @@ class DistilbertTrainingParams:
         writer.flush()
         writer.close()
 
-        torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
+        #torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
 
 
 

@@ -26,7 +26,7 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
     init_params = DistilbertTrainingParams()
@@ -40,8 +40,9 @@ def main(train_df, valid_df):
     epoch = 0
 
     #consider removing training snippets and validation snippets if possible
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
-
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
+    print("running main")
+    print()
 
 
 
@@ -64,12 +65,6 @@ def create_encoding_dict(init_params, snippets):
 
         encoded_gold_snippets = init_params.encode_snippets(partitioned_gold_snippet)
         encoded_dict[i] = encoded_gold_snippets
-
-        #if i == 0:
-        #    print("encoding snippet 0")
-        #    print("the snippets: " + str(snippets[0]))
-        #    print("encoded dict at 0: " + str(encoded_dict[0]))
-
 
     smallest_convo_size = 10
     for key, val in encoded_dict.items():
@@ -250,6 +245,8 @@ class DistilbertTrainingParams:
 
         curr_loss = self.cross_entropy_loss(model_output, labels)
         rounded_output = torch.where(softmax_output >= 0.5, torch.tensor(1), torch.tensor(0))
+        #print("model output: " + str(model_output))
+        #print("softmax_output: " + str(softmax_output))
 
         predictions = rounded_output.numpy()
         correct_preds = 0
@@ -264,7 +261,9 @@ class DistilbertTrainingParams:
                 if curr_elem[1] == 1:
                     correct_preds += 1
 
-        return curr_loss, correct_preds
+        predictions = list(predictions)
+
+        return curr_loss, correct_preds, predictions
 
 
 
@@ -330,7 +329,7 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 softmax_output, model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, softmax_output, labels)
+                curr_loss, correct_preds, predictions = self.calc_loss_and_accuracy(model_output, softmax_output, labels)
                 validation_loss += curr_loss
                 all_batch_sum += correct_preds
 
@@ -355,7 +354,6 @@ class DistilbertTrainingParams:
             print()
 
             self.prev_loss = validation_loop_losses
-
             writer.add_scalar("loss/validation", validation_loop_losses, epoch)
             writer.add_scalar("accuracy/validation", acc_avg, epoch)
 
@@ -437,7 +435,7 @@ class DistilbertTrainingParams:
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
                 softmax_output, model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
 
-                curr_loss, correct_preds = self.calc_loss_and_accuracy(model_output, softmax_output, labels)
+                curr_loss, correct_preds, predictions = self.calc_loss_and_accuracy(model_output, softmax_output, labels)
                 training_loss += curr_loss
                 all_batch_sum += correct_preds
 
@@ -478,7 +476,7 @@ class DistilbertTrainingParams:
         writer.flush()
         writer.close()
         #save the model
-        torch.save(self.convo_classifier.state_dict(), 'savedmodels/baselinemodel.pt')
+        torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
 
 
 
