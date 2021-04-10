@@ -12,6 +12,26 @@ import copy
     # Building a TF IDF matrix out of the corpus of reviews
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics import precision_recall_curve
+from sklearn.metrics import f1_score
+from matplotlib import pyplot
+
+
+"""TF-IDF with cosine similarity implemented on Personachat dataset as a non-neural baseline.
+Negative samples are the first 4 samples in the sampled list, and positive samples are the last 4.
+
+In order to determine which documents (responses) have the most direct match with the personas,
+we take the 4 with the highest percentage in the similarity array for the persona.
+Then, we store their indices in the most_similar_indices list.
+
+A list with the highest accuracy would be something like [5, 6, 7, 8, 1, 2, 3, 4]
+since the best matching responses should be the last 4 (between 5 and 8) in the sampled list,
+and the worst matching ones should be the last 4 (between 1 and 4) in the list.
+
+However, we don't count any of the values that happen to be zero for the best matches, since
+then there is no similarity to begin with.
+
+"""
 
 
 
@@ -21,6 +41,9 @@ def main(train_df):
     documents = []
     snippet_set_size = 4
     training_size = len(training_personas)
+    actual_output = ([0]*snippet_set_size + [1]*snippet_set_size)*training_size
+    output = []
+    predicted_output = []
     all_batch_sum = 0
     acc_avg = 0
 
@@ -55,10 +78,6 @@ def main(train_df):
         full_set = distractor_set + responses
 
         documents = documents + full_set
-        #print("all documents (persona and responses): " + str(documents))
-        #print()
-
-
 
         #learns vocabulary and idf, returns document term matrix
         vectorizer = TfidfVectorizer(min_df= 1, stop_words="english")
@@ -75,8 +94,11 @@ def main(train_df):
         input_doc = documents[0]
         input_idx = documents.index(input_doc)
 
+
         most_similar_indices = []
         input_doc_row = similarity_arr[input_idx]
+        #print("input doc row: " + str(input_doc_row))
+
         copy_arr = input_doc_row.copy()
 
         for j in range(0, len(input_doc_row) - 1):
@@ -84,50 +106,122 @@ def main(train_df):
             input_doc_row[largest_index] = 'nan'
             most_similar_indices.append(largest_index)
 
-        print("all indices: " + str(most_similar_indices))
+        #print("all indices: " + str(most_similar_indices))
 
 
-        #put below in separate function
-        correct_preds = 0
-        is_zero = False
+        model_output = [0]*len(most_similar_indices)
+        mid = int(len(model_output)/2)
 
         for k in range(0, len(most_similar_indices)):
 
-
             if k < len(most_similar_indices)/2:
-                if copy_arr[k] == 0:
-                    is_zero = True
+                model_output[mid + k] = copy_arr[most_similar_indices[k]]
 
-                if copy_arr[k] != 0 and (most_similar_indices[k] >= 5 and most_similar_indices[k] <= 8):
-                    correct_preds += 1
+            #the second statement is incorrect, above is fine
             else:
+                model_output[k - mid] = copy_arr[most_similar_indices[k]]
 
-                if most_similar_indices[k] <= 4 and most_similar_indices[k] >= 1:
-                    correct_preds += 1
+        output += model_output
 
-
-        if is_zero:
-            print("some positive values ended up being 0")
-
+        rounded_output, correct_preds = round_and_calc_acc(model_output)
+        predicted_output += rounded_output
         all_batch_sum += correct_preds
-        accuracy = (correct_preds/(len(most_similar_indices)))*100
-        print("current accuracy: " + str(accuracy))
-        print()
 
+        accuracy = (correct_preds/(len(model_output)))*100
+        #print("model output is: " + str(model_output))
+        #print("current accuracy: " + str(accuracy))
+        #print()
 
 
     acc_avg = all_batch_sum/((snippet_set_size*2)*(training_size + 1))*100
     print("the average accuracy of all: " + str(acc_avg))
+    print()
+    calculate_prc_and_f1(actual_output, predicted_output, output)
+
+
+
+
+def round_and_calc_acc(model_output):
+
+    #just need to calc accuracy to complete
+    rounded_output = [0]*len(model_output)
+    correct_preds = 0
+
+    for i in range(0, len(model_output)):
+        if i >= len(model_output)/2:
+            if model_output[i] >= 0.5:
+                rounded_output[i] = 1
+
+    for j in range(0, len(rounded_output)):
+
+        if j < len(rounded_output)/2:
+            if rounded_output[j] == 0:
+                correct_preds += 1
+        else:
+            if rounded_output[j] == 1:
+                correct_preds += 1
+
+
+    return rounded_output, correct_preds
 
 
 
 
 
+def calculate_prc_and_f1(actual_output, predicted_output, output):
+
+    #Note: predicted output is the model output rounded, output is the model output
+    #not rounded. actual output is the test set output
+    print("model output: " + str(output))
+    print()
+    print("rounded output: " + str(predicted_output))
+    print()
+    print("actual output: " + str(actual_output))
+
+    np_actual_output = np.asarray(actual_output)
+    np_output = np.asarray(output)
+    np_predicted_output = np.asarray(predicted_output)
+    f1 = 0
+
+    precision, recall, thresholds = precision_recall_curve(np_actual_output, np_output)
+    f1 = f1_score(np_actual_output, np_predicted_output)
+    print("f1 score: " + str(f1))
 
 
-    #result_idx = np.nanargmax(similarity_arr[input_idx])
-    #print("index of result doc: " + str(result_idx))
-    #print("the most similar document: " + str(documents[result_idx]))"""
+    # plot the precision-recall curves
+    no_skill = len(np_actual_output[np_actual_output==1]) / len(np_actual_output)
+    pyplot.plot([0, 1], [no_skill, no_skill], linestyle='--', label='No Skill')
+    pyplot.plot(recall, precision, marker='.', label='TF-IDF cosine sim')
+
+    # axis labels
+    pyplot.xlabel('Recall')
+    pyplot.ylabel('Precision')
+    # show the legend
+    pyplot.legend()
+    # show the plot
+    pyplot.show()
+
+
+
+
+
+#delete later
+def normalize_output(input_doc_row):
+
+    min_val = np.nanmin(input_doc_row)
+    max_val = np.nanmax(input_doc_row)
+
+    for i in range(0, len(input_doc_row)):
+        if not (min_val == 0 and max_val == 0):
+            input_doc_row[i] = (input_doc_row[i] - min_val)/(max_val - min_val)
+
+
+    return input_doc_row
+
+
+    #output from model in this case is the percentages we get from the similarity arr (input doc row)
+    #get input_doc_row[most_similar_indices[1 to 4]]
+
 
 
 
@@ -248,18 +342,8 @@ def create_persona_and_snippet_lists(df):
 
 
 
-
-
-
-
-
-
-
-
 #can edit this to valid.txt and test.txt in order to run on different files
 
-train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
-
-
+train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
 
 main(train_dataframe)

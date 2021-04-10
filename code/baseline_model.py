@@ -26,7 +26,7 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
     init_params = DistilbertTrainingParams()
@@ -40,9 +40,9 @@ def main(train_df, valid_df):
     epoch = 0
 
     #consider removing training snippets and validation snippets if possible
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
-    print("running main")
-    print()
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
+    #print("running main")
+
 
 
 
@@ -245,8 +245,7 @@ class DistilbertTrainingParams:
 
         curr_loss = self.cross_entropy_loss(model_output, labels)
         rounded_output = torch.where(softmax_output >= 0.5, torch.tensor(1), torch.tensor(0))
-        #print("model output: " + str(model_output))
-        #print("softmax_output: " + str(softmax_output))
+        print("rounded_output: " + str(rounded_output))
 
         predictions = rounded_output.numpy()
         correct_preds = 0
@@ -272,10 +271,13 @@ class DistilbertTrainingParams:
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
         snippet_set_size = 4
-        validation_size = 10
+        validation_size = 8
         validation_loss = 0
         acc_avg = 0
         all_batch_sum = 0
+
+        increase_threshold = 0.5
+        stored_acc = 0
 
         val_file = open("positive-validation-samples.json", "r")
         val_data = json.load(val_file)
@@ -336,15 +338,30 @@ class DistilbertTrainingParams:
                 snippet_set_size = 4
                 validation_loop_losses.append(validation_loss.item())
 
-                if i == 10:
+                if i == 8:
                     break
 
 
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
             print("the avg validation accuracy for epoch: " + str(acc_avg))
+            print()
+
+            if epoch == 0:
+                stored_acc = acc_avg
+
+            else:
+                if epoch % 10 == 0 and epoch > 0:
+                    if acc_avg - stored_acc < increase_threshold:
+                        #break from validation since acc improvement rate is decreasing
+                        print("the acc increase from the last 10 epochs is lower than threshold at epoch: " + str(epoch))
+                        return True
+                    else:
+                        stored_acc = acc_avg
+
+
             validation_loop_losses = sum(validation_loop_losses)
 
-            if not first_iter and validation_loop_losses > self.prev_loss:
+            """if not first_iter and validation_loop_losses > self.prev_loss:
                 print("we have exceeded the validation loss from last time, breaking from validation")
                 print("the loss that exceeded: " + str(validation_loop_losses))
                 return True
@@ -353,7 +370,8 @@ class DistilbertTrainingParams:
             print("current loss is: " + str(validation_loop_losses))
             print()
 
-            self.prev_loss = validation_loop_losses
+            self.prev_loss = validation_loop_losses"""
+
             writer.add_scalar("loss/validation", validation_loop_losses, epoch)
             writer.add_scalar("accuracy/validation", acc_avg, epoch)
 
@@ -371,15 +389,15 @@ class DistilbertTrainingParams:
         first_iter = True
         snippet_set_size = 4
 
-        training_size = 20
+        training_size = 10
         start_time = 0
         end_time = 0
 
         pos_file = open("positive-training-samples.json", "r")
         pos_data = json.load(pos_file)
-        exceeded_loss = False
+        acc_rate_decreasing = False
 
-        while not exceeded_loss:
+        while not acc_rate_decreasing:
             if epoch > 0:
                 first_iter = False
 
@@ -446,7 +464,7 @@ class DistilbertTrainingParams:
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 20:
+                if i == 10:
                     break
 
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(training_size + 1)))*100
@@ -457,8 +475,10 @@ class DistilbertTrainingParams:
             writer.add_scalar("accuracy/train", acc_avg, epoch)
 
             #validation loop here
-            exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            acc_rate_decreasing = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
+
+            #code for checkpointing model
             """if epoch % 10 == 0:
                 torch.save(
                     {'epoch': epoch,
@@ -468,7 +488,8 @@ class DistilbertTrainingParams:
                     }, 'savedmodels/baselineresumemodel.pt')
                 print("checkpointing model on epoch: " + str(epoch))"""
 
-            if epoch == 10:
+
+            if epoch == 5:
                 break
 
             epoch += 1
@@ -477,6 +498,8 @@ class DistilbertTrainingParams:
         writer.close()
         #save the model
         torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
+
+
 
 
 
