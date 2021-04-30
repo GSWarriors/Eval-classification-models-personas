@@ -15,6 +15,7 @@ import time
 import math
 import itertools
 import json
+import copy
 
 from mymodel import create_persona_and_snippet_lists
 from mymodel import create_encoding_dict
@@ -27,24 +28,40 @@ def main(train_df, valid_df):
     training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    print("validation persona 1: " + str(validation_personas[0]))
+    parse_long_responses(training_snippets, validation_snippets)
+
+
+def parse_long_responses(train_responses, validation_responses):
+
+
+    train_responses_first = train_responses[0]
+    validation_responses_first = validation_responses[0]
+    largest_list = []
+
+    train_responses_first.sort(key=len)
+
+    print("sorted list: " + str(train_responses_first))
     print()
-    print("train response: " + str(validation_snippets[0]))
 
-    train_responses_first = training_snippets[0]
-    validation_responses_first = validation_snippets[0]
+    largest_list = train_responses_first[len(train_responses_first) - 4:]
 
-    """for i in range(0, len(responses_first)):
+    for i in range(0, len(largest_list)):
+        print("response: " + str(largest_list[i]))
+        print("length of the response: " + str(len(largest_list[i])))
+        print()
+
+
+
+    """
+    for i in range(0, len(train_responses_first)):
         print("length of the response: " + str(len(train_responses_first[i])))
         print(str(train_responses_first[i]))
-        print()"""
-
+        print()
 
     for j in range(0, len(validation_responses_first)):
         print("length of the response: " + str(len(validation_responses_first[j])))
         print(str(validation_responses_first[j]))
-        print()
-
+        print()"""
 
 
 
@@ -57,3 +74,4 @@ delimiter='\n', header= None, error_bad_lines=False)
 
 
 main(train_dataframe, validation_dataframe)
+
