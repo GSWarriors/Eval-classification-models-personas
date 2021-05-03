@@ -26,10 +26,10 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    init_params = DistilbertTrainingParams()
+    init_params = DistilBertTrainingParams()
     init_params.create_tokens_dict()
 
     encoded_training_dict, smallest_convo_size = create_encoding_dict(init_params, training_snippets)
@@ -39,8 +39,8 @@ def main(train_df, valid_df):
     valid_persona_dict, valid_snippet_dict = create_validation_file(validation_personas, validation_snippets)
     epoch = 0
 
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
-    #print("running main")
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
+    print("running main")
 
 
 
@@ -199,7 +199,7 @@ def create_persona_and_snippet_lists(df):
 
 """This class initializes parameters needed for using distilbert as well as the parameters
 needed for fine-tuning it for personachat"""
-class DistilbertTrainingParams:
+class DistilBertTrainingParams:
 
     #create model, tokenizer and weights for persona and snippets
     #make this a function called tokenize_and_encode()
@@ -266,8 +266,8 @@ class DistilbertTrainingParams:
 
     def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
 
-        snippet_set_size = 6
-        validation_size = 10
+        snippet_set_size = 4
+        validation_size = 8
         validation_loss = 0
         acc_avg = 0
         all_batch_sum = 0
@@ -306,16 +306,16 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_validation_dict[elem][1])
 
                 else:
-                    encoded_snippet_set = [encoded_validation_dict[i - 3][1], encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
-                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1], encoded_validation_dict[i + 3][1]]
+                    encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
+                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
 
-                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1], gold_snippet_encoding[2],
-                gold_snippet_encoding[3], gold_snippet_encoding[4], gold_snippet_encoding[5]]
+                pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
+                gold_snippet_encoding[3], gold_snippet_encoding[4]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 1 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1, 1, 1]
+                gold_labels = [1, 1, 1, 1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
 
@@ -333,10 +333,10 @@ class DistilbertTrainingParams:
                 validation_loss += curr_loss
                 all_batch_sum += correct_preds
 
-                snippet_set_size = 6
+                snippet_set_size = 4
                 validation_loop_losses.append(validation_loss.item())
 
-                if i == 5:
+                if i == 8:
                     break
 
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
@@ -372,7 +372,7 @@ class DistilbertTrainingParams:
         writer = SummaryWriter('/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/runs/bert_classifier')
         train = True
         first_iter = True
-        snippet_set_size = 6
+        snippet_set_size = 4
         acc_avg = 0
 
         training_size = 20
@@ -417,16 +417,16 @@ class DistilbertTrainingParams:
                         encoded_snippet_set.append(encoded_training_dict[elem][1])
 
                 else:
-                    encoded_snippet_set = [encoded_training_dict[i - 3][1], encoded_training_dict[i - 2][1], encoded_training_dict[i - 1][1],
-                    encoded_training_dict[i + 1][1], encoded_training_dict[i + 2][1], encoded_training_dict[i + 3][1]]
+                    encoded_snippet_set = [encoded_training_dict[i - 2][1], encoded_training_dict[i - 1][1],
+                    encoded_training_dict[i + 1][1], encoded_training_dict[i + 2][1]]
 
-                pos_snippet_encodings = [gold_snippet_encoding[0], gold_snippet_encoding[1], gold_snippet_encoding[2],
-                gold_snippet_encoding[3], gold_snippet_encoding[4], gold_snippet_encoding[5]]
+                pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
+                gold_snippet_encoding[3], gold_snippet_encoding[4]]
                 full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
-                gold_labels = [1, 1, 1, 1, 1, 1]
+                gold_labels = [1, 1, 1, 1]
                 labels_list = labels_list + gold_labels
                 labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
                 padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
@@ -445,14 +445,14 @@ class DistilbertTrainingParams:
                 training_loss += curr_loss
                 all_batch_sum += correct_preds
 
-                snippet_set_size = 6
+                snippet_set_size = 4
                 training_loop_losses.append(training_loss.item())
                 training_loss.backward()
 
                 self.optimizer.step()
                 self.optimizer.zero_grad()
 
-                if i == 10:
+                if i == 20:
                     break
 
             #adding up correct predictions from each batch. Then adding up all batches
@@ -476,7 +476,7 @@ class DistilbertTrainingParams:
                     }, 'savedmodels/resumemodel.pt')
                 print("checkpointing model on epoch: " + str(epoch))"""
 
-            if epoch == 1:
+            if epoch == 4:
                 break
 
 
@@ -485,7 +485,7 @@ class DistilbertTrainingParams:
         writer.flush()
         writer.close()
 
-        #torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
+        torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
 
 
 

@@ -24,9 +24,10 @@ In order to determine which documents (responses) have the most direct match wit
 we take the 4 with the highest percentage in the similarity array for the persona.
 Then, we store their indices in the most_similar_indices list.
 
-A list with the highest accuracy would be something like [5, 6, 7, 8, 1, 2, 3, 4]
-since the best matching responses should be the last 4 (between 5 and 8) in the sampled list,
-and the worst matching ones should be the last 4 (between 1 and 4) in the list.
+We take the similarity arr value for the most similar indices and store them as the last four values in
+the model output list. Similarly, we store the four least similar values as the first four values in the model
+output list. This is in order to correspond with the actual output list, which starts with negative samples
+and ends with positive samples.
 
 However, we don't count any of the values that happen to be zero for the best matches, since
 then there is no similarity to begin with.
@@ -128,9 +129,7 @@ def main(train_df):
         all_batch_sum += correct_preds
 
         accuracy = (correct_preds/(len(model_output)))*100
-        #print("model output is: " + str(model_output))
-        #print("current accuracy: " + str(accuracy))
-        #print()
+
 
 
     acc_avg = all_batch_sum/((snippet_set_size*2)*(training_size + 1))*100
@@ -172,11 +171,9 @@ def calculate_prc_and_f1(actual_output, predicted_output, output):
 
     #Note: predicted output is the model output rounded, output is the model output
     #not rounded. actual output is the test set output
-    print("model output: " + str(output))
-    print()
-    print("rounded output: " + str(predicted_output))
-    print()
-    print("actual output: " + str(actual_output))
+    #print("rounded output: " + str(predicted_output))
+    #print()
+    #print("actual output: " + str(actual_output))
 
     np_actual_output = np.asarray(actual_output)
     np_output = np.asarray(output)
@@ -185,7 +182,12 @@ def calculate_prc_and_f1(actual_output, predicted_output, output):
 
     precision, recall, thresholds = precision_recall_curve(np_actual_output, np_output)
     f1 = f1_score(np_actual_output, np_predicted_output)
-    print("f1 score: " + str(f1))
+    print("recall: " + str(recall[5000:5500]))
+    print()
+    print("precision: " + str(precision[5000:5500]))
+    print()
+    print(thresholds[5000:5500])
+    print()
 
 
     # plot the precision-recall curves

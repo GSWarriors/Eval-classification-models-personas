@@ -26,10 +26,10 @@ Main separates dataset:
 
 def main(train_df, valid_df):
 
-    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+    """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    init_params = DistilbertTrainingParams()
+    init_params = DistilBertTrainingParams()
     init_params.create_tokens_dict()
 
     encoded_training_dict, smallest_convo_size = create_encoding_dict(init_params, training_snippets)
@@ -40,8 +40,8 @@ def main(train_df, valid_df):
     epoch = 0
 
     #consider removing training snippets and validation snippets if possible
-    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
-    #print("running main")
+    init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
+    print("running main")
 
 
 
@@ -199,7 +199,7 @@ def create_persona_and_snippet_lists(df):
 
 """This class initializes parameters needed for using distilbert as well as the parameters
 needed for fine-tuning it for personachat"""
-class DistilbertTrainingParams:
+class DistilBertTrainingParams:
 
     #create model, tokenizer and weights for persona and snippets
     #make this a function called tokenize_and_encode()
@@ -245,7 +245,7 @@ class DistilbertTrainingParams:
 
         curr_loss = self.cross_entropy_loss(model_output, labels)
         rounded_output = torch.where(softmax_output >= 0.5, torch.tensor(1), torch.tensor(0))
-        print("rounded_output: " + str(rounded_output))
+        #print("rounded_output: " + str(rounded_output))
 
         predictions = rounded_output.numpy()
         correct_preds = 0
@@ -361,17 +361,6 @@ class DistilbertTrainingParams:
 
             validation_loop_losses = sum(validation_loop_losses)
 
-            """if not first_iter and validation_loop_losses > self.prev_loss:
-                print("we have exceeded the validation loss from last time, breaking from validation")
-                print("the loss that exceeded: " + str(validation_loop_losses))
-                return True
-
-            print("the prev loss is saved as: " + str(self.prev_loss))
-            print("current loss is: " + str(validation_loop_losses))
-            print()
-
-            self.prev_loss = validation_loop_losses"""
-
             writer.add_scalar("loss/validation", validation_loop_losses, epoch)
             writer.add_scalar("accuracy/validation", acc_avg, epoch)
 
@@ -382,7 +371,7 @@ class DistilbertTrainingParams:
     """This function does the actual training over the personas."""
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch):
 
-        #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distilbert.parameters().grad
+        #optimizer adjusts distilbertandbilinear model by subtracting lr*persona_distil.parameters().grad
         #and lr*bilinear_layer.parameters.grad(). After that, we zero the gradients
         writer = SummaryWriter('/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/runs/bert_classifier')
         train = True
