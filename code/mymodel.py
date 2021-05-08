@@ -61,9 +61,9 @@ def create_encoding_dict(init_params, snippets):
 
         partitioned_gold_snippet = partition_snippets(snippets[i], 1)
         partitioned_gold_snippet = list(partitioned_gold_snippet)
-
         encoded_gold_snippets = init_params.encode_snippets(partitioned_gold_snippet)
         encoded_dict[i] = encoded_gold_snippets
+
 
 
     smallest_convo_size = 10
