@@ -22,15 +22,111 @@ from mymodel import create_encoding_dict
 from mymodel import DistilBertTrainingParams
 from mymodel import create_training_file
 from mymodel import create_validation_file
+from mymodel import add_padding_and_mask
 
 
 class longvsshort(DistilBertTrainingParams):
 
 
+    def validate_model(self, validation_personas, encoded_validation_dict, epoch, first_iter, writer):
+        snippet_set_size = 4
+        validation_size = 8
+        validation_loss = 0
+        acc_avg = 0
+        all_batch_sum = 0
+
+        val_file = open("positive-validation-samples.json", "r")
+        val_data = json.load(val_file)
+        validation_loop_losses = []
+
+        with torch.no_grad():
+            self.convo_classifier.model.eval()
+
+            for i in range(0, len(validation_personas)):
+
+                persona_convo = ' '.join(val_data[i]['text persona'])
+                snippet_convo = val_data[i]['text snippet']
+                persona_encoding = [self.tokenizer.encode(persona_convo, add_special_tokens=True)]
+                gold_snippet_encoding = encoded_validation_dict[i]
+
+                encoded_snippet_set = []
+                print("starting validation iteration: " + str(i))
+
+                if i + (snippet_set_size/2) >= validation_size and i - snippet_set_size >= 0:
+                    #print("nearing the end ")
+
+                    #take the preceding 4 snippets as distractors
+                    for elem in range(i - snippet_set_size, i):
+                        #print("on distractor snippet: " + str(elem))
+                        encoded_snippet_set.append(encoded_validation_dict[elem][1])
+
+                elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < validation_size:
+
+                    #print("starting out ")
+                    #take the proceeding 4 snippets as distractors
+                    for elem in range(i + 1, i + snippet_set_size + 1):
+                        #print("on distractor snippet: " + str(elem))
+                        encoded_snippet_set.append(encoded_validation_dict[elem][1])
+
+                else:
+                    encoded_snippet_set = [encoded_validation_dict[i - 2][1], encoded_validation_dict[i - 1][1],
+                    encoded_validation_dict[i + 1][1], encoded_validation_dict[i + 2][1]]
+
+                pos_snippet_encodings = pos_snippet_encodings = gold_snippet_encoding
+                full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
+
+                #this size of this is 1 except for last set
+                labels_list = [0]*snippet_set_size
+                gold_labels = [1, 1, 1, 1]
+                labels_list = labels_list + gold_labels
+                labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=self.device)
+
+                padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
+                snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(self.device)
+                #send input to distilbert
+                with torch.no_grad():
+                    snippet_hidden_states = self.model(snippet_input_ids)
+
+                snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
+                torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
+                model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+
+                curr_loss, correct_preds, predictions = self.calc_loss_and_accuracy(model_output, labels)
+                validation_loss += curr_loss
+                all_batch_sum += correct_preds
+
+                snippet_set_size = 4
+                validation_loop_losses.append(validation_loss.item())
+
+                if i == 8:
+                    break
+
+            acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(validation_size + 1)))*100
+            print("the avg validation accuracy for epoch: " + str(acc_avg))
+            print()
+            validation_loop_losses = sum(validation_loop_losses)
+
+
+            if not first_iter and validation_loop_losses > self.prev_loss:
+                print("we have exceeded the validation loss from last time, breaking from validation")
+                print("the loss that exceeded: " + str(validation_loop_losses))
+                return True
+
+            self.prev_loss = validation_loop_losses
+            print("current loss is: " + str(validation_loop_losses))
+            print("the prev loss is saved as: " + str(self.prev_loss))
+
+            writer.add_scalar("loss/validation", validation_loop_losses, epoch)
+            writer.add_scalar("accuracy/validation", acc_avg, epoch)
+
+
+
+
+
+
     def train_model(self, training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch):
 
         #run model on test set after training longer.
-
         writer = SummaryWriter('/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/runs/bert_classifier')
         train = True
         first_iter = True
@@ -80,15 +176,7 @@ class longvsshort(DistilBertTrainingParams):
 
 
                 pos_snippet_encodings = gold_snippet_encoding
-                print()
-                print("positive encoding: " + str(pos_snippet_encodings))
-
-                if i == 0:
-                    break
-
-
-
-                """full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
+                full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
                 #this size of this is 4 except for last set
                 labels_list = [0]*snippet_set_size
@@ -104,6 +192,7 @@ class longvsshort(DistilBertTrainingParams):
 
                 snippet_set_features = snippet_hidden_states[0][:, 0, :].to(self.device)
                 torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
+
                 model_output = self.convo_classifier.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
                 print("model output (without threshold): " + str(model_output))
 
@@ -121,6 +210,7 @@ class longvsshort(DistilBertTrainingParams):
                 if i == 20:
                     break
 
+
             #adding up correct predictions from each batch. Then adding up all batches
             #finally, taking average of correct predictions for all samples over the entire snippet sets
             acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(training_size + 1)))*100
@@ -131,18 +221,16 @@ class longvsshort(DistilBertTrainingParams):
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
-            exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)"""
+            exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
-
-            if epoch == 0:
+            if epoch == 3:
                 break
-
 
             epoch += 1
 
+
         writer.flush()
         writer.close()
-
         torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
 
 
