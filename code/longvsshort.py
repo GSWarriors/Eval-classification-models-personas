@@ -221,7 +221,7 @@ class longvsshort(DistilBertTrainingParams):
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
-            exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            #exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
             if epoch == 3:
                 break
@@ -272,16 +272,13 @@ class longvsshort(DistilBertTrainingParams):
             curr_shortest = curr_response[0: 4]
             all_shortest.append(curr_shortest)
 
-            #print("curr shortest from training persona: " + str(i))
-            #print(str(curr_shortest))
-            #print()
-
-            #prints out length of all responses
-            """for j in range(0, len(responses[i])):
-                print("response: " + str(responses[i][j]))
-                print("length of the response: " + str(len(responses[i][j])))
-            print()
-            print()"""
+            #debugging to check last shortest response list
+            """if i == 999:
+                for j in range(0, len(curr_response)):
+                    print("response: " + str(curr_response[j]))
+                    print("length of the response: " + str(len(curr_response[j])))
+                    print()
+                print()"""
 
         return all_shortest
 
@@ -293,7 +290,8 @@ class longvsshort(DistilBertTrainingParams):
 
 
 
-
+"""Note: can replace parse long and short responses to get different responses
+and different results"""
 def main(train_df, valid_df):
 
     test_one = longvsshort()
@@ -302,36 +300,32 @@ def main(train_df, valid_df):
     training_personas, training_responses = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_responses = create_persona_and_snippet_lists(valid_df)
 
-    test_one.create_tokens_dict()
-
-
-    #longest ones
+    #longest personas and responses
     #longest_train_responses = test_one.parse_long_responses(training_responses)
     #print("longest responses from training set: " + str(longest_train_responses))
     #longest_validation_responses = test_one.parse_long_responses(validation_responses)
 
-    #shortest ones
+    #shortest personas and responses
     shortest_train_responses = test_one.parse_short_responses(training_responses)
-    #shortest_validation_responses = test_one.parse_short_responses(validation_responses)
-    print("shortest training responses: " + str(shortest_train_responses))
-    #print(len(shortest_validation_responses))
+    shortest_validation_responses = test_one.parse_short_responses(validation_responses)
+    #print("shortest validation responses: " + str(shortest_validation_responses[999]))
+    #print("shortest training responses: " + str(shortest_train_responses))
 
 
+    test_one.create_tokens_dict()
 
+    encoded_training_dict, smallest_convo_size = create_encoding_dict(test_one, shortest_train_responses)
+    encoded_validation_dict, smallest_convo_size = create_encoding_dict(test_one, shortest_validation_responses)
 
-    """test_one.create_tokens_dict()
-
-    encoded_training_dict, smallest_convo_size = create_encoding_dict(test_one, longest_train_responses)
-    encoded_validation_dict, smallest_convo_size = create_encoding_dict(test_one, longest_validation_responses)
-
-    train_persona_dict, train_response_dict = create_training_file(training_personas, longest_train_responses)
-    valid_persona_dict, valid_response_dict = create_validation_file(validation_personas, longest_validation_responses)
+    train_persona_dict, train_response_dict = create_training_file(training_personas, shortest_train_responses)
+    valid_persona_dict, valid_response_dict = create_validation_file(validation_personas, shortest_validation_responses)
 
     epoch = 0
+
+    #test_one version of training model function
+    #the encoded training and validation dictionaries include the shortest/longest responses
     test_one.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
 
-    #implement own version of train model where the distractors are the same, but the positive samples are
-    #all the gold snippet encodings (there are only 4)"""
 
 
 
