@@ -235,11 +235,6 @@ class longvsshort(DistilBertTrainingParams):
 
 
 
-
-
-
-
-
     def parse_long_responses(self, responses):
 
         all_longest = []
@@ -263,6 +258,41 @@ class longvsshort(DistilBertTrainingParams):
 
 
 
+    def parse_short_responses(self, responses):
+
+
+        all_shortest = []
+
+        for i in range(0, len(responses)):
+            #one list of response for current persona
+            curr_shortest = []
+            curr_response = responses[i]
+            responses[i].sort(key=len)
+
+            curr_shortest = curr_response[0: 4]
+            all_shortest.append(curr_shortest)
+
+            #print("curr shortest from training persona: " + str(i))
+            #print(str(curr_shortest))
+            #print()
+
+            #prints out length of all responses
+            """for j in range(0, len(responses[i])):
+                print("response: " + str(responses[i][j]))
+                print("length of the response: " + str(len(responses[i][j])))
+            print()
+            print()"""
+
+        return all_shortest
+
+
+
+
+
+
+
+
+
 
 def main(train_df, valid_df):
 
@@ -272,10 +302,24 @@ def main(train_df, valid_df):
     training_personas, training_responses = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_responses = create_persona_and_snippet_lists(valid_df)
 
-    longest_train_responses = test_one.parse_long_responses(training_responses)
-    longest_validation_responses = test_one.parse_long_responses(validation_responses)
-
     test_one.create_tokens_dict()
+
+
+    #longest ones
+    #longest_train_responses = test_one.parse_long_responses(training_responses)
+    #print("longest responses from training set: " + str(longest_train_responses))
+    #longest_validation_responses = test_one.parse_long_responses(validation_responses)
+
+    #shortest ones
+    shortest_train_responses = test_one.parse_short_responses(training_responses)
+    #shortest_validation_responses = test_one.parse_short_responses(validation_responses)
+    print("shortest training responses: " + str(shortest_train_responses))
+    #print(len(shortest_validation_responses))
+
+
+
+
+    """test_one.create_tokens_dict()
 
     encoded_training_dict, smallest_convo_size = create_encoding_dict(test_one, longest_train_responses)
     encoded_validation_dict, smallest_convo_size = create_encoding_dict(test_one, longest_validation_responses)
