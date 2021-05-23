@@ -221,9 +221,9 @@ class longvsshort(DistilBertTrainingParams):
             writer.add_scalar("loss/train", training_loop_losses, epoch)
             writer.add_scalar("accuracy/train", acc_avg, epoch)
             #validation loop here
-            #exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
+            exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
-            if epoch == 3:
+            if epoch == 2:
                 break
 
             epoch += 1
@@ -301,24 +301,24 @@ def main(train_df, valid_df):
     validation_personas, validation_responses = create_persona_and_snippet_lists(valid_df)
 
     #longest personas and responses
-    #longest_train_responses = test_one.parse_long_responses(training_responses)
+    longest_train_responses = test_one.parse_long_responses(training_responses)
+    longest_validation_responses = test_one.parse_long_responses(validation_responses)
     #print("longest responses from training set: " + str(longest_train_responses))
-    #longest_validation_responses = test_one.parse_long_responses(validation_responses)
 
     #shortest personas and responses
-    shortest_train_responses = test_one.parse_short_responses(training_responses)
-    shortest_validation_responses = test_one.parse_short_responses(validation_responses)
+    #shortest_train_responses = test_one.parse_short_responses(training_responses)
+    #shortest_validation_responses = test_one.parse_short_responses(validation_responses)
     #print("shortest validation responses: " + str(shortest_validation_responses[999]))
     #print("shortest training responses: " + str(shortest_train_responses))
 
 
     test_one.create_tokens_dict()
 
-    encoded_training_dict, smallest_convo_size = create_encoding_dict(test_one, shortest_train_responses)
-    encoded_validation_dict, smallest_convo_size = create_encoding_dict(test_one, shortest_validation_responses)
+    encoded_training_dict, smallest_convo_size = create_encoding_dict(test_one, longest_train_responses)
+    encoded_validation_dict, smallest_convo_size = create_encoding_dict(test_one, longest_validation_responses)
 
-    train_persona_dict, train_response_dict = create_training_file(training_personas, shortest_train_responses)
-    valid_persona_dict, valid_response_dict = create_validation_file(validation_personas, shortest_validation_responses)
+    train_persona_dict, train_response_dict = create_training_file(training_personas, longest_train_responses)
+    valid_persona_dict, valid_response_dict = create_validation_file(validation_personas, longest_validation_responses)
 
     epoch = 0
 
