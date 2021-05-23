@@ -223,7 +223,14 @@ class longvsshort(DistilBertTrainingParams):
             #validation loop here
             exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
-            if epoch == 2:
+            if epoch == 6:
+                torch.save(
+                    {'epoch': epoch,
+                    'model_state_dict': self.convo_classifier.state_dict(),
+                    'optimizer_state_dict': self.optimizer.state_dict(),
+                    'prev_loss': self.prev_loss
+                    }, "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/resumemodel.pt")
+                print("checkpointing model on epoch: " + str(epoch))
                 break
 
             epoch += 1
@@ -294,7 +301,7 @@ class longvsshort(DistilBertTrainingParams):
 and different results"""
 def main(train_df, valid_df):
 
-    test_one = longvsshort()
+    """test_one = longvsshort()
 
     #largest 4 for both training and validation
     training_personas, training_responses = create_persona_and_snippet_lists(train_df)
@@ -324,7 +331,9 @@ def main(train_df, valid_df):
 
     #test_one version of training model function
     #the encoded training and validation dictionaries include the shortest/longest responses
-    test_one.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)
+    test_one.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
+
+    print("in test mode for longvsshort")
 
 
 
