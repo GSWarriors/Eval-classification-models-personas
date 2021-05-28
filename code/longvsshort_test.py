@@ -35,7 +35,7 @@ from baseline_model import add_padding_and_mask"""
 def main(train_df, valid_df, test_df):
 
     #this code is only for resuming training, not testing
-    longshort_params = longvsshort()
+    """longshort_params = longvsshort()
     longshort_params.create_tokens_dict()
 
     #convo classifier is already created by running putting distilbert training params
@@ -56,48 +56,46 @@ def main(train_df, valid_df, test_df):
     print("the prev loss saved was: " + str(prev_loss))
     print()
 
-    resume_training(train_df, valid_df, longshort_params, epoch, prev_loss)
-
-
-
-
-
-
-
+    resume_training(train_df, valid_df, longshort_params, epoch, prev_loss)"""
 
 
 
 
     #this code is for testing
-    """training_params = DistilBertTrainingParams()
-    training_params.create_tokens_dict()
+    #work in progress
+    longshort_params = longvsshort()
+    longshort_params.create_tokens_dict()
 
     print("model parameters initialized, and tokens dict created")
-    saved_model = training_params.convo_classifier
-    saved_optimizer = training_params.optimizer
+    saved_model = longshort_params.convo_classifier
+    saved_optimizer = longshort_params.optimizer
 
     #mymodel implementation
-    saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/finaldistilbertmodel.pt", map_location=torch.device('cpu')))
+    saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/test1model.pt", map_location=torch.device('cpu')))
 
     #extra variables saved implementation below
     #checkpoint = torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/baselinemodel120.pt", map_location=torch.device('cpu'))
 
-    test_personas, test_snippets = create_persona_and_snippet_lists(test_df)
-    encoded_test_dict, smallest_convo_size = create_encoding_dict(training_params, test_snippets)
+    test_personas, test_responses = create_persona_and_snippet_lists(test_df)
+    longest_test_responses = longshort_params.parse_long_responses(test_responses)
+    #print("longest responses from test set: " + str(longest_test_responses))
 
-    create_testing_file(test_personas, test_snippets)
+    encoded_test_dict, smallest_convo_size = create_encoding_dict(longshort_params, longest_test_responses)
+
+    create_testing_file(test_personas, longest_test_responses)
     print("created test file")
-    print("smallest convo size: " + str(smallest_convo_size))
 
     #test below- maybe changed saved model back to training params
-    test_model(test_personas, encoded_test_dict, saved_model, training_params)"""
+    test_model(test_personas, encoded_test_dict, saved_model, longshort_params)
 
 
 
-def test_model(test_personas, encoded_test_dict, saved_model, training_params):
+
+
+def test_model(test_personas, encoded_test_dict, saved_model, longshort_params):
 
     snippet_set_size = 4
-    test_size = len(test_personas)
+    test_size = 10
     test_loss = 0
     acc_avg = 0
     all_batch_sum = 0
@@ -116,7 +114,7 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
         for i in range(0, len(test_personas)):
             persona_convo = ' '.join(test_data[i]['text persona'])
             snippet_convo = test_data[i]['text snippet']
-            persona_encoding = [training_params.tokenizer.encode(persona_convo, add_special_tokens=True)]
+            persona_encoding = [longshort_params.tokenizer.encode(persona_convo, add_special_tokens=True)]
             gold_snippet_encoding = encoded_test_dict[i]
 
             encoded_snippet_set = []
@@ -138,8 +136,7 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
                 encoded_snippet_set = [encoded_test_dict[i - 2][1], encoded_test_dict[i - 1][1],
                 encoded_test_dict[i + 1][1], encoded_test_dict[i + 2][1]]
 
-            pos_snippet_encodings = [gold_snippet_encoding[1], gold_snippet_encoding[2],
-            gold_snippet_encoding[3], gold_snippet_encoding[4]]
+            pos_snippet_encodings = gold_snippet_encoding
             full_encoded_snippet_set = encoded_snippet_set + pos_snippet_encodings
 
             labels_list = [0]*snippet_set_size
@@ -147,29 +144,29 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
             labels_list = labels_list + gold_labels
 
             #mymodel labels
-            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=training_params.device)
+            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=longshort_params.device)
 
             #baseline model labels
-            #labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=training_params.device)
+            #labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=longshort_params.device)
 
             padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
-            snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(training_params.device)
+            snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(longshort_params.device)
             #send input to distilbert
             with torch.no_grad():
-                snippet_hidden_states = training_params.model(snippet_input_ids)
+                snippet_hidden_states = longshort_params.model(snippet_input_ids)
 
-            snippet_set_features = snippet_hidden_states[0][:, 0, :].to(training_params.device)
+            snippet_set_features = snippet_hidden_states[0][:, 0, :].to(longshort_params.device)
             torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
             #my model forward and loss and accuracy
             model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
-            curr_loss, correct_preds, predictions = training_params.calc_loss_and_accuracy(model_output, labels)
+            curr_loss, correct_preds, predictions = longshort_params.calc_loss_and_accuracy(model_output, labels)
             output += model_output
             predicted_output += predictions
 
             #baseline loss and accuracy
             #softmax_output, model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
-            #curr_loss, correct_preds, predictions = training_params.calc_loss_and_accuracy(model_output, softmax_output, labels)
+            #curr_loss, correct_preds, predictions = longshort_params.calc_loss_and_accuracy(model_output, softmax_output, labels)
             #print("output: (without threshold) " + str(softmax_output))
             #print("predictions (rounded output): " + str(predictions))
             #print()
@@ -181,9 +178,12 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
             snippet_set_size = 4
             test_loop_losses.append(test_loss.item())
 
+            if i == 9:
+                break
+
 
         acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(test_size + 1)))*100
-        print("the avg test accuracy for epoch: " + str(acc_avg))
+        print("the avg test accuracy: " + str(acc_avg))
         print()
         test_loop_losses = sum(test_loop_losses)
         print("total test loss: " + str(test_loop_losses))
@@ -200,6 +200,8 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
 
     #for k in range(0, len(predicted_output)):
     #    predicted_output[k] = predicted_output[k][1].item()
+
+
 
     calculate_prc_and_f1(actual_output, predicted_output, output)
 
@@ -253,7 +255,7 @@ def calculate_prc_and_f1(actual_output, predicted_output, output):
     # plot the precision-recall curves
     no_skill = len(np_actual_output[np_actual_output==1]) / len(np_actual_output)
     pyplot.plot([0, 1], [no_skill, no_skill], linestyle='--', label='No Skill')
-    pyplot.plot(recall, precision, marker='.', label='Logistic regression')
+    pyplot.plot(recall, precision, marker='.', label='Bilinear + sigmoid')
 
     # axis labels
     pyplot.xlabel('Recall')
@@ -262,6 +264,8 @@ def calculate_prc_and_f1(actual_output, predicted_output, output):
     pyplot.legend()
     # show the plot
     pyplot.show()
+
+
 
 
 
