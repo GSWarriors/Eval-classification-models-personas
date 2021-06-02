@@ -71,18 +71,18 @@ def main(train_df, valid_df, test_df):
     saved_optimizer = longshort_params.optimizer
 
     #mymodel implementation
-    saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/test1model.pt", map_location=torch.device('cpu')))
+    saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/test1_shortmodel.pt", map_location=torch.device('cpu')))
 
     #extra variables saved implementation below
     #checkpoint = torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/baselinemodel120.pt", map_location=torch.device('cpu'))
 
     test_personas, test_responses = create_persona_and_snippet_lists(test_df)
-    longest_test_responses = longshort_params.parse_long_responses(test_responses)
+    shortest_test_responses = longshort_params.parse_short_responses(test_responses)
     #print("longest responses from test set: " + str(longest_test_responses))
 
-    encoded_test_dict, smallest_convo_size = create_encoding_dict(longshort_params, longest_test_responses)
+    encoded_test_dict, smallest_convo_size = create_encoding_dict(longshort_params, shortest_test_responses)
 
-    create_testing_file(test_personas, longest_test_responses)
+    create_testing_file(test_personas, shortest_test_responses)
     print("created test file")
 
     #test below- maybe changed saved model back to training params
@@ -95,7 +95,7 @@ def main(train_df, valid_df, test_df):
 def test_model(test_personas, encoded_test_dict, saved_model, longshort_params):
 
     snippet_set_size = 4
-    test_size = 10
+    test_size = len(test_personas)
     test_loss = 0
     acc_avg = 0
     all_batch_sum = 0
@@ -178,8 +178,6 @@ def test_model(test_personas, encoded_test_dict, saved_model, longshort_params):
             snippet_set_size = 4
             test_loop_losses.append(test_loss.item())
 
-            if i == 9:
-                break
 
 
         acc_avg = ((all_batch_sum)/((snippet_set_size*2)*(test_size + 1)))*100
@@ -264,6 +262,7 @@ def calculate_prc_and_f1(actual_output, predicted_output, output):
     pyplot.legend()
     # show the plot
     pyplot.show()
+
 
 
 

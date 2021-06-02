@@ -32,15 +32,12 @@ from baseline_model import create_validation_file
 from baseline_model import add_padding_and_mask"""
 
 
-#start_time = time.perf_counter()
-#end_time = time.perf_counter()
-#end - start to calc time
 
 
 def main(train_df, valid_df, test_df):
 
-    """#this code is only for resuming training, not testing
-    training_params = DistilbertTrainingParams()
+    #this code is only for resuming training, not testing
+    """training_params = DistilbertTrainingParams()
     training_params.create_tokens_dict()
 
     #convo classifier is already created by running putting distilbert training params
@@ -66,7 +63,7 @@ def main(train_df, valid_df, test_df):
 
 
     #this code is for testing
-    training_params = DistilBertTrainingParams()
+    """training_params = DistilBertTrainingParams()
     training_params.create_tokens_dict()
 
     print("model parameters initialized, and tokens dict created")
@@ -87,7 +84,7 @@ def main(train_df, valid_df, test_df):
     print("smallest convo size: " + str(smallest_convo_size))
 
     #test below- maybe changed saved model back to training params
-    test_model(test_personas, encoded_test_dict, saved_model, training_params)
+    test_model(test_personas, encoded_test_dict, saved_model, training_params)"""
 
 
 

@@ -223,7 +223,7 @@ class longvsshort(DistilBertTrainingParams):
             #validation loop here
             exceeded_loss = self.validate_model(validation_personas, encoded_validation_dict, epoch, first_iter, writer)
 
-            if epoch == 6:
+            """if epoch == 6:
                 torch.save(
                     {'epoch': epoch,
                     'model_state_dict': self.convo_classifier.state_dict(),
@@ -231,14 +231,21 @@ class longvsshort(DistilBertTrainingParams):
                     'prev_loss': self.prev_loss
                     }, "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/resumemodel.pt")
                 print("checkpointing model on epoch: " + str(epoch))
-                break
+                break"""
 
             epoch += 1
+
+            if epoch == 3:
+                break
 
 
         writer.flush()
         writer.close()
         torch.save(self.convo_classifier.state_dict(), "/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/savedmodels/practicemodel.pt")
+
+
+
+
 
 
 
@@ -308,24 +315,24 @@ def main(train_df, valid_df):
     validation_personas, validation_responses = create_persona_and_snippet_lists(valid_df)
 
     #longest personas and responses
-    longest_train_responses = test_one.parse_long_responses(training_responses)
-    longest_validation_responses = test_one.parse_long_responses(validation_responses)
+    #longest_train_responses = test_one.parse_long_responses(training_responses)
+    #longest_validation_responses = test_one.parse_long_responses(validation_responses)
     #print("longest responses from training set: " + str(longest_train_responses))
 
     #shortest personas and responses
-    #shortest_train_responses = test_one.parse_short_responses(training_responses)
-    #shortest_validation_responses = test_one.parse_short_responses(validation_responses)
-    #print("shortest validation responses: " + str(shortest_validation_responses[999]))
-    #print("shortest training responses: " + str(shortest_train_responses))
+    shortest_train_responses = test_one.parse_short_responses(training_responses)
+    shortest_validation_responses = test_one.parse_short_responses(validation_responses)
+    print("shortest validation responses: " + str(shortest_validation_responses[999]))
+    print("shortest training responses: " + str(shortest_train_responses))
 
 
     test_one.create_tokens_dict()
 
-    encoded_training_dict, smallest_convo_size = create_encoding_dict(test_one, longest_train_responses)
-    encoded_validation_dict, smallest_convo_size = create_encoding_dict(test_one, longest_validation_responses)
+    encoded_training_dict, smallest_convo_size = create_encoding_dict(test_one, shortest_train_responses)
+    encoded_validation_dict, smallest_convo_size = create_encoding_dict(test_one, shortest_validation_responses)
 
-    train_persona_dict, train_response_dict = create_training_file(training_personas, longest_train_responses)
-    valid_persona_dict, valid_response_dict = create_validation_file(validation_personas, longest_validation_responses)
+    train_persona_dict, train_response_dict = create_training_file(training_personas, shortest_train_responses)
+    valid_persona_dict, valid_response_dict = create_validation_file(validation_personas, shortest_validation_responses)
 
     epoch = 0
 
