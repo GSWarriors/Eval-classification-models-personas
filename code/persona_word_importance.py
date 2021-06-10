@@ -11,7 +11,7 @@ import math
 import itertools
 import json
 from matplotlib import pyplot
-
+import nltk
 
 from mymodel import DistilBertTrainingParams
 from mymodel import DistilBertandBilinear
@@ -58,15 +58,46 @@ def modify_responses(test_personas, encoded_test_dict, saved_model, training_par
     test_file = open("positive-test-samples.json", "r")
     test_data = json.load(test_file)
 
+    stopwords_list = []
+
+    #opens file with stopwords and puts it into a list
+    with open("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/stopwords/english.txt", "r") as stopwords_file:
+        for line in stopwords_file:
+            line = line.strip('\n')
+            stopwords_list.append(line)
+
+    #print("stopwords list: " + str(stopwords_list))
+
+
+
 
     for i in range(0, len(test_personas)):
         persona_convo = ' '.join(test_data[i]['text persona'])
         response_convo = test_data[i]['text snippet']
         #persona_encoding = [training_params.tokenizer.encode(persona_convo, add_special_tokens=True)]
         #gold_snippet_encoding = encoded_test_dict[i]
-        print("persona: " + str(persona_convo))
+        print("persona before split: " + str(persona_convo))
         print()
-        print("response: " + str(response_convo))
+
+
+        persona_convo = persona_convo.split()
+        #persona_convo = nltk.word_tokenize(persona_convo)
+        print("persona after split: " + str(persona_convo))
+
+
+        freq_dict = {}
+
+        for j in range(0, len(persona_convo)):
+            curr_word = persona_convo[j]
+            if curr_word not in stopwords_list:
+                if curr_word not in freq_dict:
+                    freq_dict[curr_word] = 1
+                else:
+                    freq_dict[curr_word] += 1
+
+        print("frequency dict: " + str(freq_dict))
+        #print("response: " + str(response_convo))
+
 
         if i == 0:
             break
