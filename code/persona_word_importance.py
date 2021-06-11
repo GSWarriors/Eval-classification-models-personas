@@ -34,20 +34,16 @@ def main(test_df):
     training_params = DistilBertTrainingParams()
     training_params.create_tokens_dict()
 
-    print("model parameters initialized, and tokens dict created")
     saved_model = training_params.convo_classifier
     saved_optimizer = training_params.optimizer
 
     #mymodel implementation
     saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/finaldistilbertmodel.pt", map_location=torch.device('cpu')))
 
-    print("done loading original distilbert model!")
-
-
+    #print("done loading original distilbert model!")
     test_personas, test_responses = create_persona_and_snippet_lists(test_df)
     encoded_test_dict, smallest_convo_size = create_encoding_dict(training_params, test_responses)
     create_testing_file(test_personas, test_responses)
-    print("created test file")
 
     #here's the part where I modify the responses in the test set
     modify_responses(test_personas, encoded_test_dict, saved_model, training_params)
@@ -55,10 +51,11 @@ def main(test_df):
 
 
 
+
+
 def modify_responses(test_personas, encoded_test_dict, saved_model, training_params):
     test_file = open("positive-test-samples.json", "r")
     test_data = json.load(test_file)
-
     stopwords_list = []
 
     #opens file with stopwords and puts it into a list
@@ -67,6 +64,7 @@ def modify_responses(test_personas, encoded_test_dict, saved_model, training_par
             line = line.strip('\n')
             stopwords_list.append(line)
 
+    stopwords_list.append('speaker-1')
 
 
     for i in range(0, len(test_personas)):
@@ -74,17 +72,21 @@ def modify_responses(test_personas, encoded_test_dict, saved_model, training_par
         response_convo = test_data[i]['text snippet']
         #persona_encoding = [training_params.tokenizer.encode(persona_convo, add_special_tokens=True)]
         #gold_snippet_encoding = encoded_test_dict[i]
-        #print("persona before split: " + str(persona_convo))
-        #print()
-
+        print("persona convo: " + str(persona_convo))
 
         filtered_words_list = tag_persona_and_create_dict(persona_convo, stopwords_list)
-        create_response_freq_dict(response_convo, filtered_words_list, stopwords_list)
+        print("response convo before: " + str(response_convo))
+        print()
+        response_convo = create_response_freq_dict(response_convo, filtered_words_list, stopwords_list)
+        print("response convo after: " + str(response_convo))
 
-        #combine persona and response dicts
+
 
         if i == 0:
             break
+
+
+
 
 
 
@@ -110,17 +112,17 @@ def tag_persona_and_create_dict(persona_convo, stopwords_list):
             else:
                 persona_dict[curr_elem] += 1
 
-    #print("frequency dict: " + str(persona_dict))
-    print("persona after removing punctuation: " + str(persona_words_list))
-    print()
+    #print("persona after removing punctuation: " + str(persona_words_list))
+    #print()
     tagged = nltk.pos_tag(persona_words_list)
-
-    print("tagged list: " + str(tagged))
-    print()
+    #print("tagged list: " + str(tagged))
+    #print()
 
     noun_tags = ['NN', 'NNS', 'NNP', 'NNPS']
 
     filtered_words_list = list(filter(lambda x: x[1] in noun_tags, tagged))
+    #take out the second tuple now- with the part of speech
+    filtered_words_list = [x[0] for x in filtered_words_list]
 
     #record the frequency of the response dict with only nouns in the persona
     print("filtered persona list: " + str(filtered_words_list))
@@ -130,41 +132,48 @@ def tag_persona_and_create_dict(persona_convo, stopwords_list):
 
 
 
+
+
 def create_response_freq_dict(response_convo, filtered_words_list, stopwords_list):
 
     #tokenize response
-
     response_dict = {}
     for i in range(0, len(response_convo)):
-        response_convo[i] = nltk.word_tokenize(response_convo[i])
-        curr_response = response_convo[i]
+        tokenized_convo = nltk.word_tokenize(response_convo[i])
 
         #check for stopwords and punctuation. then, add to dict
-        for j in range(0, len(curr_response)):
-            if (curr_response[j] not in stopwords_list) and curr_response[j] not in string.punctuation:
-                if curr_response[j] not in response_dict:
-                    response_dict[curr_response[j]] = 1
+        for j in range(0, len(tokenized_convo)):
+            word = tokenized_convo[j]
+            if word in filtered_words_list:
+                if word not in response_dict:
+                    response_dict[word] = 1
                 else:
-                    response_dict[curr_response[j]] += 1
-
-    print("the response dict: " + str(response_dict))
+                    response_dict[word] += 1
 
 
-
-
-#code to combine persona and response- should be in prev function (modify responses)
-
-"""print("persona frequency dict: " + str(persona_dict))
+    #for removing most frequent word that's in persona and response
+    print("response dict: " + str(response_dict))
     print()
-    print("response frequency dict: " + str(response_dict))
-    print()
+    max_key = max(response_dict, key = response_dict.get)
 
-    #add values from both persona and response into a final dict
-    for key, val in response_dict.items():
-        if key not in final_dict:
-            final_dict[key] = persona_dict[key] + val
+    for elem in range(0, len(response_convo)):
+        curr_convo = response_convo[elem]
+        curr_convo = curr_convo.replace(max_key, '')
+        response_convo[elem] = curr_convo
 
-    print("the final dict: " + str(final_dict))"""
+
+
+
+    #TODO
+    #for removing all matching words between persona and response
+    #for key, val in response_dict.items():
+    #    if key in response_convo:
+    #        response_convo.remove(key)
+
+
+    return response_convo
+
+
 
 
 
