@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import precision_recall_curve
 from sklearn.metrics import f1_score
+from nltk.stem.snowball import SnowballStemmer
 import transformers as ppb  #pytorch transformers
 import random as rand
 import time
@@ -13,6 +14,7 @@ import json
 from matplotlib import pyplot
 import nltk
 import string
+
 
 from mymodel import DistilBertTrainingParams
 from mymodel import DistilBertandBilinear
@@ -72,25 +74,23 @@ def modify_responses(test_personas, saved_model, training_params):
 
     stopwords_list.append('speaker-1')
 
+
     new_test_responses = []
-
-
     for i in range(0, len(test_personas)):
+
 
         persona_convo = ' '.join(test_data[i]['text persona'])
         response_convo = test_data[i]['text snippet']
 
-        if i == 30:
-
+        if i == 955:
             filtered_words_list = tag_persona_and_create_dict(persona_convo, stopwords_list)
             create_response_freq_dict(response_convo, filtered_words_list, stopwords_list)
-
 
         new_test_responses.append(response_convo)
 
 
 
-    #print("length of new test responses: " + str(len(new_test_responses)))
+    print("length of new test responses: " + str(len(new_test_responses)))
 
 
 
@@ -138,12 +138,59 @@ def tag_persona_and_create_dict(persona_convo, stopwords_list):
 
 
 
+def remove_response_words(response_dict, response_convo):
+
+    #dictionary that stores the most frequent nouns/noun phrases that come from the same stem
+    response_stem_dict = {}
+    remove_list = []
+
+    stemmer = SnowballStemmer("english")
+
+    for key in response_dict.keys():
+        stem_key = stemmer.stem(key)
+        if stem_key not in response_stem_dict:
+            response_stem_dict[stem_key] = 1
+        else:
+            response_stem_dict[stem_key] += 1
+
+
+    #max key only exists if response stem dict >= 1
+    if len(response_stem_dict) >= 1:
+        max_key = max(response_stem_dict, key = response_stem_dict.get)
+
+
+        for key in response_dict.keys():
+            stem_key = stemmer.stem(key)
+
+            if stem_key == max_key:
+                remove_list.append(key)
+
+    print("response stem dict: " + str(response_stem_dict))
+    print()
+    print("remove list: " + str(remove_list))
+
+
+    #remove all words from response convo that are in remove list
+    for i in range(0, len(response_convo)):
+        curr_convo = response_convo[i]
+
+        for j in range(0, len(remove_list)):
+            curr_convo = curr_convo.replace(remove_list[j], '')
+
+        response_convo[i] = curr_convo
+
+    print()
+    print("response after removing words: " + str(response_convo))
+
+
+
+    return response_stem_dict
+
+
 
 
 
 def create_response_freq_dict(response_convo, filtered_words_list, stopwords_list):
-    #really slow- O(n^4)
-
     #tokenize response
     response_dict = {}
     for i in range(0, len(response_convo)):
@@ -154,10 +201,6 @@ def create_response_freq_dict(response_convo, filtered_words_list, stopwords_lis
         for token in tokenized_convo:
             if token not in string.punctuation and token not in stopwords_list:
                 new_tokenized_convo.append(token)
-
-        print("new tokenized convo: " + str(new_tokenized_convo))
-        print()
-
 
         #first checks if the word we have is directly in the filtered words list
         #if it is, we add it, otherwise we check whether its a substring of one of those
@@ -172,15 +215,22 @@ def create_response_freq_dict(response_convo, filtered_words_list, stopwords_lis
                     response_dict[word] = 1
                 else:
                     response_dict[word] += 1
-                continue
 
             else:
                 for filtered_word in filtered_words_list:
-                    if word in filtered_word:
+
+                    stemmer = SnowballStemmer("english")
+                    filtered_word_stem = stemmer.stem(filtered_word)
+                    word_stem = stemmer.stem(word)
+
+                    if word_stem == filtered_word_stem:
                         if word not in response_dict:
+                            print("special case. the word added is: " + str(word))
                             response_dict[word] = 1
                         else:
                             response_dict[word] += 1
+
+
 
 
     #for removing most frequent word that's in persona and response
@@ -188,33 +238,22 @@ def create_response_freq_dict(response_convo, filtered_words_list, stopwords_lis
     print()
 
 
+    response_stem_dict = remove_response_words(response_dict, response_convo)
 
 
 
 
 
 
-    """#max key only exists if response dict >= 1
-    if len(response_dict) >= 1:
-        max_key = max(response_dict, key = response_dict.get)
 
-        for elem in range(0, len(response_convo)):
-            curr_convo = response_convo[elem]
-
-            #check whether some part of max key in curr convo
-            curr_convo = curr_convo.replace(max_key, '')
-            response_convo[elem] = curr_convo
-
-
-
-    #TODO
+    #TODO- might not do this now- only if time
     #for removing all matching words between persona and response
     #for key, val in response_dict.items():
     #    if key in response_convo:
     #        response_convo.remove(key)
 
 
-    return response_convo"""
+    #return response_convo
 
 
 
