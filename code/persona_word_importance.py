@@ -25,9 +25,10 @@ from mymodel import create_validation_file
 from mymodel import add_padding_and_mask
 
 from mymodel_test import create_testing_file
+from mymodel_test import test_model
 
 
-#need 3 models total
+#need 3 models total. bilinear + sigmoid, logistic, tf-idf
 
 def main(test_df):
 
@@ -43,17 +44,18 @@ def main(test_df):
     saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/finaldistilbertmodel.pt", map_location=torch.device('cpu')))
 
     #print("done loading original distilbert model!")
+    #first testing file create (with all response words)
     test_personas, test_responses = create_persona_and_snippet_lists(test_df)
     create_testing_file(test_personas, test_responses)
 
-    #print("test responses: " + str(test_responses[0:10]))
-    #print("length of test responses: " + str(len(test_responses)))
 
-    #here's the part where I modify the responses in the test set
-    #print()
-    modify_responses(test_personas, saved_model, training_params)
+    #here's the part where I modify the responses in the test set- remove words that have most freq stem
+    test_responses = modify_responses(test_personas, saved_model, training_params)
+    encoded_test_dict, smallest_convo_size = create_encoding_dict(training_params, test_responses)
 
-    #encoded_test_dict, smallest_convo_size = create_encoding_dict(training_params, test_responses)
+    #recreate testing file
+    create_testing_file(test_personas, test_responses)
+    test_model(test_personas, encoded_test_dict, saved_model, training_params)
 
 
 
@@ -78,20 +80,18 @@ def modify_responses(test_personas, saved_model, training_params):
     new_test_responses = []
     for i in range(0, len(test_personas)):
 
-
         persona_convo = ' '.join(test_data[i]['text persona'])
         response_convo = test_data[i]['text snippet']
 
-        if i == 955:
-            filtered_words_list = tag_persona_and_create_dict(persona_convo, stopwords_list)
-            create_response_freq_dict(response_convo, filtered_words_list, stopwords_list)
-
+        filtered_words_list = tag_persona_and_create_dict(persona_convo, stopwords_list)
+        create_response_freq_dict(response_convo, filtered_words_list, stopwords_list)
         new_test_responses.append(response_convo)
 
 
 
     print("length of new test responses: " + str(len(new_test_responses)))
-
+    #print("new test responses: " + str(new_test_responses))
+    return new_test_responses
 
 
 
@@ -101,8 +101,6 @@ def tag_persona_and_create_dict(persona_convo, stopwords_list):
 
     #tokenize persona into separate words
     persona_convo = nltk.word_tokenize(persona_convo)
-    #print("persona after tokenization: " + str(persona_convo))
-    #print()
 
     persona_dict = {}
     final_dict = {}
@@ -126,14 +124,13 @@ def tag_persona_and_create_dict(persona_convo, stopwords_list):
     #print()
 
     noun_tags = ['NN', 'NNS', 'NNP', 'NNPS']
-
     filtered_words_list = list(filter(lambda x: x[1] in noun_tags, tagged))
     #take out the second tuple now- with the part of speech
     filtered_words_list = [x[0] for x in filtered_words_list]
 
     #record the frequency of the response dict with only nouns in the persona
-    print("filtered persona list: " + str(filtered_words_list))
-    print()
+    #print("filtered persona list: " + str(filtered_words_list))
+    #print()
     return filtered_words_list
 
 
@@ -143,7 +140,6 @@ def remove_response_words(response_dict, response_convo):
     #dictionary that stores the most frequent nouns/noun phrases that come from the same stem
     response_stem_dict = {}
     remove_list = []
-
     stemmer = SnowballStemmer("english")
 
     for key in response_dict.keys():
@@ -165,9 +161,7 @@ def remove_response_words(response_dict, response_convo):
             if stem_key == max_key:
                 remove_list.append(key)
 
-    print("response stem dict: " + str(response_stem_dict))
-    print()
-    print("remove list: " + str(remove_list))
+    #print("remove list: " + str(remove_list))
 
 
     #remove all words from response convo that are in remove list
@@ -179,10 +173,8 @@ def remove_response_words(response_dict, response_convo):
 
         response_convo[i] = curr_convo
 
-    print()
-    print("response after removing words: " + str(response_convo))
-
-
+    #print()
+    #print("response after removing words: " + str(response_convo))
 
     return response_stem_dict
 
@@ -225,26 +217,17 @@ def create_response_freq_dict(response_convo, filtered_words_list, stopwords_lis
 
                     if word_stem == filtered_word_stem:
                         if word not in response_dict:
-                            print("special case. the word added is: " + str(word))
+                            #print("special case. the word added is: " + str(word))
                             response_dict[word] = 1
                         else:
                             response_dict[word] += 1
 
-
-
-
     #for removing most frequent word that's in persona and response
-    print("response dict: " + str(response_dict))
-    print()
+    #print("response dict: " + str(response_dict))
+    #print()
 
 
     response_stem_dict = remove_response_words(response_dict, response_convo)
-
-
-
-
-
-
 
     #TODO- might not do this now- only if time
     #for removing all matching words between persona and response
