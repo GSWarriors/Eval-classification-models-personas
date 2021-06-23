@@ -14,22 +14,22 @@ import json
 from matplotlib import pyplot
 
 
-from mymodel import DistilBertTrainingParams
+"""from mymodel import DistilBertTrainingParams
 from mymodel import DistilBertandBilinear
 from mymodel import create_persona_and_snippet_lists
 from mymodel import create_encoding_dict
 from mymodel import create_training_file
 from mymodel import create_validation_file
-from mymodel import add_padding_and_mask
+from mymodel import add_padding_and_mask"""
 
 
-"""from baseline_model import DistilBertTrainingParams
-from baseline_model import DistilBertandBilinear
+from baseline_model import BertTrainingParams
+from baseline_model import BertandBilinear
 from baseline_model import create_persona_and_snippet_lists
 from baseline_model import create_encoding_dict
 from baseline_model import create_training_file
 from baseline_model import create_validation_file
-from baseline_model import add_padding_and_mask"""
+from baseline_model import add_padding_and_mask
 
 
 
@@ -63,7 +63,7 @@ def main(train_df, valid_df, test_df):
 
 
     #this code is for testing
-    """training_params = DistilBertTrainingParams()
+    training_params = BertTrainingParams()
     training_params.create_tokens_dict()
 
     print("model parameters initialized, and tokens dict created")
@@ -71,10 +71,10 @@ def main(train_df, valid_df, test_df):
     saved_optimizer = training_params.optimizer
 
     #mymodel implementation
-    saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/finaldistilbertmodel.pt", map_location=torch.device('cpu')))
+    #saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/finaldistilbertmodel.pt", map_location=torch.device('cpu')))
 
-    #extra variables saved implementation below
-    #checkpoint = torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/baselinemodel120.pt", map_location=torch.device('cpu'))
+    #baseline logistic regression (BERT)
+    saved_model.load_state_dict(torch.load("/Users/arvindpunj/Desktop/Projects/NLP lab research/savedmodels/finalbertbaseline.pt", map_location=torch.device('cpu')))
 
     test_personas, test_snippets = create_persona_and_snippet_lists(test_df)
     encoded_test_dict, smallest_convo_size = create_encoding_dict(training_params, test_snippets)
@@ -84,7 +84,9 @@ def main(train_df, valid_df, test_df):
     print("smallest convo size: " + str(smallest_convo_size))
 
     #test below- maybe changed saved model back to training params
-    test_model(test_personas, encoded_test_dict, saved_model, training_params)"""
+    test_model(test_personas, encoded_test_dict, saved_model, training_params)
+
+
 
 
 
@@ -141,10 +143,10 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
             labels_list = labels_list + gold_labels
 
             #mymodel labels
-            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=training_params.device)
+            #labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.float, device=training_params.device)
 
             #baseline model labels
-            #labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=training_params.device)
+            labels = torch.tensor(labels_list, requires_grad=False, dtype=torch.long, device=training_params.device)
 
             padded_snippet, snippet_attention_mask = add_padding_and_mask(full_encoded_snippet_set)
             snippet_input_ids = torch.from_numpy(padded_snippet).type(torch.long).to(training_params.device)
@@ -156,19 +158,20 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
             torch_snippet_features = snippet_set_features.clone().detach().requires_grad_(False)
 
             #my model forward and loss and accuracy
-            model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
-            curr_loss, correct_preds, predictions = training_params.calc_loss_and_accuracy(model_output, labels)
-            output += model_output
-            predicted_output += predictions
+            #model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+            #curr_loss, correct_preds, predictions = training_params.calc_loss_and_accuracy(model_output, labels)
+            #output += model_output
+            #predicted_output += predictions
 
             #baseline loss and accuracy
-            #softmax_output, model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
-            #curr_loss, correct_preds, predictions = training_params.calc_loss_and_accuracy(model_output, softmax_output, labels)
+            softmax_output, model_output = saved_model.forward(persona_encoding, len(full_encoded_snippet_set), torch_snippet_features)
+            curr_loss, correct_preds, predictions = training_params.calc_loss_and_accuracy(model_output, softmax_output, labels)
             #print("output: (without threshold) " + str(softmax_output))
             #print("predictions (rounded output): " + str(predictions))
             #print()
-            #output += softmax_output
-            #predicted_output += predictions
+            output += softmax_output
+            predicted_output += predictions
+
 
             test_loss += curr_loss
             all_batch_sum += correct_preds
@@ -184,16 +187,16 @@ def test_model(test_personas, encoded_test_dict, saved_model, training_params):
 
 
     #my model
-    for j in range(0, len(output)):
-        output[j] = output[j].item()
+    #for j in range(0, len(output)):
+    #    output[j] = output[j].item()
 
     #baseline
     #only take second elements of each tensor to keep probabilities of only positive outcome
-    #for j in range(0, len(output)):
-    #    output[j] = output[j][1].item()
+    for j in range(0, len(output)):
+        output[j] = output[j][1].item()
 
-    #for k in range(0, len(predicted_output)):
-    #    predicted_output[k] = predicted_output[k][1].item()
+    for k in range(0, len(predicted_output)):
+        predicted_output[k] = predicted_output[k][1].item()
 
     calculate_prc_and_f1(actual_output, predicted_output, output)
 

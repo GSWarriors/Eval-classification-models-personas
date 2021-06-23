@@ -29,7 +29,7 @@ def main(train_df, valid_df):
     """training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
     validation_personas, validation_snippets = create_persona_and_snippet_lists(valid_df)
 
-    init_params = DistilBertTrainingParams()
+    init_params = BertTrainingParams()
     init_params.create_tokens_dict()
 
     encoded_training_dict, smallest_convo_size = create_encoding_dict(init_params, training_snippets)
@@ -41,7 +41,7 @@ def main(train_df, valid_df):
 
     #consider removing training snippets and validation snippets if possible
     init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
-    print("running main")
+    print("running baseline main")
 
 
 
@@ -199,14 +199,14 @@ def create_persona_and_snippet_lists(df):
 
 """This class initializes parameters needed for using distilbert as well as the parameters
 needed for fine-tuning it for personachat"""
-class DistilBertTrainingParams:
+class BertTrainingParams:
 
     #create model, tokenizer and weights for persona and snippets
     #make this a function called tokenize_and_encode()
     def __init__(self):
-        distilbert_size = 768
+        bert_size = 768
 
-        self.model_class, self.tokenizer_class, self.pretrained_weights = (ppb.DistilBertModel, ppb.DistilBertTokenizer, 'distilbert-base-uncased')
+        self.model_class, self.tokenizer_class, self.pretrained_weights = (ppb.BertModel, ppb.BertTokenizer, 'bert-base-uncased')
         self.tokenizer = self.tokenizer_class.from_pretrained('./model/')
         self.model = self.model_class.from_pretrained('./model/')
         print("baseline model created")
@@ -215,10 +215,10 @@ class DistilBertTrainingParams:
 
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss()
-        #self.bi_layer = torch.nn.Bilinear(distilbert_size, distilbert_size, 2)
-        self.lin_layer = torch.nn.Linear(distilbert_size, 2)
+        #self.bi_layer = torch.nn.Bilinear(bert_size, bert_size, 2)
+        self.lin_layer = torch.nn.Linear(bert_size, 2)
 
-        self.convo_classifier = DistilBertandBilinear(self.model, self.lin_layer).to(self.device)
+        self.convo_classifier = BertandBilinear(self.model, self.lin_layer).to(self.device)
         self.optimizer = torch.optim.AdamW(self.convo_classifier.parameters(), lr=1e-6)
         self.prev_loss = 0
 
@@ -497,14 +497,14 @@ class DistilBertTrainingParams:
 Hidden states: everything in last_hidden_states, now unpack 3-d output tensor.
         #features is 2d array with sentence embeddings of all sentences in dataset.
         #the model treats the entire persona as one "sentence"""
-class DistilBertandBilinear(torch.nn.Module):
+class BertandBilinear(torch.nn.Module):
 
     def __init__(self, model, linear_layer):
         super().__init__()
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.model = model
         self.linear_layer = linear_layer
-        self.distilbert_size = 768
+        self.bert_size = 768
 
 
     #can modify to find hidden states without detaching to numpy? (requires more computation)

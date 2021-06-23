@@ -40,7 +40,7 @@ def main(train_df, valid_df):
     epoch = 0
 
     init_params.train_model(training_personas, validation_personas, encoded_training_dict, encoded_validation_dict, epoch)"""
-    print("running main")
+    print("running mymodel main")
 
 
 
