@@ -42,7 +42,7 @@ from mymodel_test import test_model
 
 def main(test_df):
 
-    #load original distilbert + bilinear saved model and open/modify test set
+    """#load original distilbert + bilinear saved model and open/modify test set
     training_params = BertTrainingParams()
     training_params.create_tokens_dict()
 
@@ -61,12 +61,12 @@ def main(test_df):
     create_testing_file(test_personas, test_responses)
 
     #here's the part where I modify the responses in the test set- remove words that have most freq stem
-    test_responses = modify_responses(test_personas, saved_model, training_params)
+    test_responses = modify_responses(test_personas)
     encoded_test_dict, smallest_convo_size = create_encoding_dict(training_params, test_responses)
 
     #recreate testing file
     create_testing_file(test_personas, test_responses)
-    test_model(test_personas, encoded_test_dict, saved_model, training_params)
+    test_model(test_personas, encoded_test_dict, saved_model, training_params)"""
 
 
 
@@ -74,11 +74,17 @@ def main(test_df):
 
 
 
-def modify_responses(test_personas, saved_model, training_params):
-    test_file = open("positive-test-samples.json", "r")
-    test_data = json.load(test_file)
+def modify_responses(personas):
+    #uncomment below for using test data
+    #test_file = open("positive-test-samples.json", "r")
+    #test_data = json.load(test_file)
+
+    #uncomment below for using training data
+    train_file = open("positive-training-samples.json", "r")
+    train_data = json.load(train_file)
+
+
     stopwords_list = []
-
     #opens file with stopwords and puts it into a list
     with open("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/stopwords/english.txt", "r") as stopwords_file:
         for line in stopwords_file:
@@ -88,22 +94,31 @@ def modify_responses(test_personas, saved_model, training_params):
     stopwords_list.append('speaker-1')
 
 
-    new_test_responses = []
-    for i in range(0, len(test_personas)):
+    new_responses = []
+    for i in range(0, len(personas)):
 
-        persona_convo = ' '.join(test_data[i]['text persona'])
-        response_convo = test_data[i]['text snippet']
+        print("on persona: " + str(i))
+
+        #uncomment for test data
+        #persona_convo = ' '.join(test_data[i]['text persona'])
+        #response_convo = test_data[i]['text snippet']
+
+        #uncomment for training data
+        persona_convo = ' '.join(train_data[i]['text persona'])
+        response_convo = train_data[i]['text snippet']
 
         filtered_words_list = tag_persona_and_create_dict(persona_convo, stopwords_list)
         create_response_freq_dict(response_convo, filtered_words_list, stopwords_list)
-        new_test_responses.append(response_convo)
+        new_responses.append(response_convo)
 
 
-    print("length of new test responses: " + str(len(new_test_responses)))
+    print("length of new test responses: " + str(len(new_responses)))
     print()
-    #print("new test responses: " + str(new_test_responses))
+    print("new responses: " + str(new_responses))
 
-    return new_test_responses
+    return new_responses
+
+
 
 
 

@@ -9,12 +9,15 @@ import random as rand
 import math
 import json
 import copy
+from persona_word_importance import modify_responses
+
     # Building a TF IDF matrix out of the corpus of reviews
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.metrics import precision_recall_curve
 from sklearn.metrics import f1_score
 from matplotlib import pyplot
+
 
 
 """TF-IDF with cosine similarity implemented on Personachat dataset as a non-neural baseline.
@@ -38,11 +41,14 @@ then there is no similarity to begin with.
 
 def main(train_df):
 
-    training_personas, training_snippets = create_persona_and_snippet_lists(train_df)
+
+    train_personas, train_responses = create_persona_and_snippet_lists(train_df)
+    train_responses = modify_responses(train_personas)
+
     documents = []
-    snippet_set_size = 4
-    training_size = len(training_personas)
-    actual_output = ([0]*snippet_set_size + [1]*snippet_set_size)*training_size
+    response_set_size = 4
+    training_size = len(train_personas)
+    actual_output = ([0]*response_set_size + [1]*response_set_size)*training_size
     output = []
     predicted_output = []
     all_batch_sum = 0
@@ -51,31 +57,32 @@ def main(train_df):
 
     #loop through all training personas and calculate accuracy in batches
     #handle edge cases for starting and ending responses
+    print()
 
-    for i in range(0, len(training_personas)):
-        curr_doc = ' '.join(training_personas[i])
+    for i in range(0, len(train_personas)):
+        curr_doc = ' '.join(train_personas[i])
         documents = [curr_doc]
         distractor_set = []
         full_set = []
 
-        print("on persona: " + str(i))
+        print("for tf-idf, on persona: " + str(i))
 
-        if i + (snippet_set_size/2) >= training_size and i - snippet_set_size >= 0:
+        if i + (response_set_size/2) >= training_size and i - response_set_size >= 0:
             #take the preceding 4 snippets as distractors
-            for elem in range(i - snippet_set_size, i):
-                distractor_set.append(training_snippets[elem][1])
+            for elem in range(i - response_set_size, i):
+                distractor_set.append(train_responses[elem][1])
 
-        elif i - (snippet_set_size/2) < 0 and i + snippet_set_size < training_size:
+        elif i - (response_set_size/2) < 0 and i + response_set_size < training_size:
             #take the proceeding 4 snippets as distractors
-            for elem in range(i + 1, i + snippet_set_size + 1):
-                distractor_set.append(training_snippets[elem][1])
+            for elem in range(i + 1, i + response_set_size + 1):
+                distractor_set.append(train_responses[elem][1])
 
         else:
-            distractor_set = [training_snippets[i - 2][1], training_snippets[i - 1][1],
-            training_snippets[i + 1][1], training_snippets[i + 2][1]]
+            distractor_set = [train_responses[i - 2][1], train_responses[i - 1][1],
+            train_responses[i + 1][1], train_responses[i + 2][1]]
 
         #right now documents contains the first document, followed by 2 negative and 2 positive responses samples
-        responses = [training_snippets[i][1], training_snippets[i][2], training_snippets[i][3], training_snippets[i][4]]
+        responses = [train_responses[i][1], train_responses[i][2], train_responses[i][3], train_responses[i][4]]
         full_set = distractor_set + responses
 
         documents = documents + full_set
@@ -132,7 +139,7 @@ def main(train_df):
 
 
 
-    acc_avg = all_batch_sum/((snippet_set_size*2)*(training_size + 1))*100
+    acc_avg = all_batch_sum/((response_set_size*2)*(training_size + 1))*100
     print("the average accuracy of all: " + str(acc_avg))
     print()
     calculate_prc_and_f1(actual_output, predicted_output, output)
@@ -182,6 +189,8 @@ def calculate_prc_and_f1(actual_output, predicted_output, output):
 
     precision, recall, thresholds = precision_recall_curve(np_actual_output, np_output)
     f1 = f1_score(np_actual_output, np_predicted_output)
+    print("f1 score: " + str(f1))
+    print()
     print("recall: " + str(recall[5000:5500]))
     print()
     print("precision: " + str(precision[5000:5500]))
@@ -347,5 +356,8 @@ def create_persona_and_snippet_lists(df):
 #can edit this to valid.txt and test.txt in order to run on different files
 
 train_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/train_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
+#test_dataframe = pd.read_csv("/Users/arvindpunj/Desktop/Projects/NLP lab research/Extracting-personas-for-text-generation/data/test_other_original.txt",delimiter='\n', header= None, error_bad_lines=False)
+
+
 
 main(train_dataframe)
