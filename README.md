@@ -1,1 +1,1 @@
-Training BERT LLM to classify assumed person text from Personachat to spoken speaker responses for persona consistency- main project info on 'dataset-refactor' branch.
+Training BERT LLM to classify assumed person text from Personachat to spoken speaker responses for persona consistency to help in building more efficient dialogue systems- main project info on 'dataset-refactor' branch.
